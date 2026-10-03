@@ -26,6 +26,8 @@ export default function SpaceBackground() {
     container.appendChild(renderer.domElement);
 
     const textureLoader = new THREE.TextureLoader();
+    const base = import.meta.env.BASE_URL || './';
+    const assetBase = base.endsWith('/') ? base : `${base}/`;
     const masterGroup = new THREE.Group();
     scene.add(masterGroup);
 
@@ -93,7 +95,7 @@ export default function SpaceBackground() {
     // =========================================================
     // 2. PRIMARY MILKY WAY GALAXY SPIRAL (3D TILTED PLANE)
     // =========================================================
-    const galaxyTexture = textureLoader.load('/galaxy.jpg');
+    const galaxyTexture = textureLoader.load(`${assetBase}galaxy.jpg`);
     galaxyTexture.colorSpace = THREE.SRGBColorSpace;
 
     const galaxyGeo = new THREE.PlaneGeometry(360, 240);
@@ -116,7 +118,7 @@ export default function SpaceBackground() {
     // 3. SECONDARY DISTANT SPIRAL GALAXY (ANDROMEDA-STYLE)
     // =========================================================
     // Positioned in the upper-left cosmic quadrant in depth without glare
-    const andromedaTexture = textureLoader.load('/andromeda.jpg');
+    const andromedaTexture = textureLoader.load(`${assetBase}andromeda.jpg`);
     andromedaTexture.colorSpace = THREE.SRGBColorSpace;
 
     const andromedaGeo = new THREE.PlaneGeometry(280, 170);
@@ -138,7 +140,7 @@ export default function SpaceBackground() {
     // =========================================================
     // 4. DEEP SPACE NEBULA CLOUDS (INTERSTELLAR DUST PILLARS)
     // =========================================================
-    const nebulaTexture = textureLoader.load('/nebula.jpg');
+    const nebulaTexture = textureLoader.load(`${assetBase}nebula.jpg`);
     nebulaTexture.colorSpace = THREE.SRGBColorSpace;
 
     // Primary Cosmic Dust Nebula Field (Mid-background depth)
@@ -177,7 +179,7 @@ export default function SpaceBackground() {
     planetGroup.position.set(74, -24, -70);
     masterGroup.add(planetGroup);
 
-    const planetTexture = textureLoader.load('/earth.jpg');
+    const planetTexture = textureLoader.load(`${assetBase}earth.jpg`);
     planetTexture.colorSpace = THREE.SRGBColorSpace;
 
     const planetRadius = 24;

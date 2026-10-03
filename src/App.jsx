@@ -48,6 +48,7 @@ import SpaceBackground from './SpaceBackground';
 import ShootingStars from './ShootingStars';
 import RocketAnimation from './RocketAnimation';
 import AerospaceClickEffect from './AerospaceClickEffect';
+import IsroLogo from './IsroLogo';
 
 // Multi-lot simulated flight components dataset
 const lotDatasets = {
@@ -305,12 +306,8 @@ export default function App() {
       <header className="topbar">
         <div className="brand-left">
           {/* Official ISRO Logo */}
-          <div className="isro-official-badge">
-            <img
-              src="/isro_logo.svg"
-              alt="ISRO - Indian Space Research Organisation"
-              className="isro-logo-img"
-            />
+          <div className="isro-official-badge" title="ISRO - Indian Space Research Organisation">
+            <IsroLogo className="isro-logo-img" />
           </div>
           <div className="brand-info">
             <div className="eyebrow">
