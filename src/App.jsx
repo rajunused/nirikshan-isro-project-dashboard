@@ -49,6 +49,7 @@ import ShootingStars from './ShootingStars';
 import RocketAnimation from './RocketAnimation';
 import AerospaceClickEffect from './AerospaceClickEffect';
 import IsroLogo from './IsroLogo';
+import MonteCarloRocketDrawer from './MonteCarloRocketDrawer';
 
 // Multi-lot simulated flight components dataset
 const lotDatasets = {
@@ -121,6 +122,8 @@ export default function App() {
   const [risk, setRisk] = useState(62);
   const [has96, setHas96] = useState(true);
   const [showMonteCarlo, setShowMonteCarlo] = useState(false);
+  const [mcRunId, setMcRunId] = useState(1);
+  const trajectoryChartRef = useRef(null);
   const [running, setRunning] = useState(false);
   const [query, setQuery] = useState('');
   const [filterVerdict, setFilterVerdict] = useState('ALL');
@@ -199,9 +202,18 @@ export default function App() {
       { low: 11, high: 20 },
     ];
 
+    // Stochastic seed variance for dynamic Monte Carlo trajectory runs
+    const seedVariation = Math.sin(mcRunId * 12.9898) * 3.8;
+    const driftFactor = (comp.slope || 0.05) * 1.15 + (Math.cos(mcRunId * 7.823) * 0.035);
+
     return hours.map((h, i) => {
       const actualVal = comp.baseline[i];
       const showActual = i < 2 || (i === 2 ? has96 : true);
+
+      // Primary simulated Monte Carlo trajectory drawn by the rocket
+      const mcSimVal = Number(
+        (actualVal + (i * 24 * driftFactor) + (i >= 2 ? seedVariation : (seedVariation * 0.25))).toFixed(1)
+      );
 
       return {
         h,
@@ -210,11 +222,12 @@ export default function App() {
         actual: showActual ? actualVal : undefined,
         forecast: i >= 1 ? actualVal : undefined,
         ceiling: Number((11 + slope * i * 24).toFixed(1)),
-        mc1: showMonteCarlo ? Number((actualVal * 0.92 + (i * 0.8)).toFixed(1)) : undefined,
-        mc2: showMonteCarlo ? Number((actualVal * 1.08 - (i * 0.4)).toFixed(1)) : undefined,
+        mcSim: showMonteCarlo ? Math.min(58, Math.max(6, mcSimVal)) : undefined,
+        mc1: showMonteCarlo ? Number((mcSimVal * 0.94 - 1.2).toFixed(1)) : undefined,
+        mc2: showMonteCarlo ? Number((mcSimVal * 1.06 + 1.2).toFixed(1)) : undefined,
       };
     });
-  }, [comp, slope, has96, showMonteCarlo]);
+  }, [comp, slope, has96, showMonteCarlo, mcRunId]);
 
   // Scatter chart data
   const scatterData = useMemo(() => {
@@ -783,15 +796,35 @@ export default function App() {
                   <span className="toggle-text">96H ARRIVAL</span>
                 </label>
 
-                {/* Monte Carlo Toggle */}
-                <button
-                  className={`subtle-btn ${showMonteCarlo ? 'active' : ''}`}
-                  onClick={() => setShowMonteCarlo(!showMonteCarlo)}
-                  title="Toggle Monte Carlo probabilistic trajectory fan"
-                >
-                  <Orbit size={13} />
-                  <span>MONTE CARLO</span>
-                </button>
+                {/* Monte Carlo Toggle & Simulation Launcher */}
+                <div className="mc-btn-group">
+                  <button
+                    className={`subtle-btn mc-toggle-btn ${showMonteCarlo ? 'active' : ''}`}
+                    onClick={() => {
+                      if (!showMonteCarlo) {
+                        setShowMonteCarlo(true);
+                        setMcRunId(1);
+                      } else {
+                        // Re-trigger new simulation run with rocket animation
+                        setMcRunId((prev) => prev + 1);
+                      }
+                    }}
+                    title="Launch Monte Carlo trajectory simulation with rocket flight animation"
+                  >
+                    <Orbit size={13} className={showMonteCarlo ? 'spin-slow' : ''} />
+                    <span>MONTE CARLO</span>
+                    {showMonteCarlo && <span className="mc-run-chip">RUN #{mcRunId}</span>}
+                  </button>
+                  {showMonteCarlo && (
+                    <button
+                      className="subtle-btn mc-reset-btn"
+                      onClick={() => setShowMonteCarlo(false)}
+                      title="Clear Monte Carlo simulation"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -806,10 +839,17 @@ export default function App() {
               </i>
             </div>
 
-            {/* Trajectory Composed Chart */}
-            <div className="chart-wrap trajectory">
+            {/* Trajectory Composed Chart with Rocket Drawer Overlay */}
+            <div className="chart-wrap trajectory" ref={trajectoryChartRef}>
+              {/* Rocket Trajectory Drawer Animation */}
+              <MonteCarloRocketDrawer
+                containerRef={trajectoryChartRef}
+                isActive={showMonteCarlo}
+                runId={mcRunId}
+                data={trajectory}
+              />
               <ResponsiveContainer width="100%" height={215}>
-                <ComposedChart data={trajectory}>
+                <ComposedChart data={trajectory} margin={{ top: 15, right: 25, left: 10, bottom: 20 }}>
                   <defs>
                     <linearGradient id="healthyBandGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.22} />
@@ -859,26 +899,38 @@ export default function App() {
                     stroke="none"
                     fill="#05080e"
                   />
-                  {/* Monte Carlo Fan Lines */}
+                  {/* Monte Carlo Trajectory & Confidence Envelope Lines */}
                   {showMonteCarlo && (
                     <>
                       <Line
-                        name="MC Lower"
+                        name="MC 95% Lower Bound"
                         dataKey="mc1"
                         stroke="#818cf8"
                         strokeWidth={1}
-                        strokeDasharray="2 2"
+                        strokeDasharray="2 3"
                         dot={false}
-                        opacity={0.6}
+                        opacity={0.45}
+                        isAnimationActive={false}
                       />
                       <Line
-                        name="MC Upper"
+                        name="MC 95% Upper Bound"
                         dataKey="mc2"
                         stroke="#818cf8"
                         strokeWidth={1}
-                        strokeDasharray="2 2"
+                        strokeDasharray="2 3"
                         dot={false}
-                        opacity={0.6}
+                        opacity={0.45}
+                        isAnimationActive={false}
+                      />
+                      {/* Primary Simulated Flight Trajectory (Drawn by Rocket) */}
+                      <Line
+                        name="MC Flight Trajectory"
+                        dataKey="mcSim"
+                        stroke="#00f0ff"
+                        strokeWidth={2.8}
+                        dot={false}
+                        className="mc-rocket-line"
+                        isAnimationActive={false}
                       />
                     </>
                   )}
@@ -934,6 +986,11 @@ export default function App() {
               <span>
                 <i className="line dashed" /> HEALTHY LOT ENVELOPE
               </span>
+              {showMonteCarlo && (
+                <span>
+                  <i className="line neon-cyan" /> MC SIMULATED TRAJECTORY (RUN #{mcRunId})
+                </span>
+              )}
               <span className="limit">LIMIT 50 µA</span>
             </div>
           </div>

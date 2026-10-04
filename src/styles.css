@@ -1067,6 +1067,76 @@ main {
   color: #e0e7ff;
 }
 
+/* Monte Carlo Button & Rocket Trajectory Animation Controls */
+.mc-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.subtle-btn.mc-toggle-btn.active {
+  background: rgba(0, 240, 255, 0.16);
+  border-color: #00f0ff;
+  color: #00f0ff;
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.35);
+}
+
+.mc-run-chip {
+  background: rgba(0, 240, 255, 0.25);
+  color: #00f0ff;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 8px;
+  font-weight: 700;
+  border: 1px solid rgba(0, 240, 255, 0.4);
+}
+
+.subtle-btn.mc-reset-btn {
+  padding: 5px 6px;
+  color: #94a3b8;
+}
+
+.subtle-btn.mc-reset-btn:hover {
+  color: #f43f5e;
+  border-color: #f43f5e;
+}
+
+.spin-slow {
+  animation: spinSlow 8s linear infinite;
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Glowing Neon Cyan Line for Monte Carlo */
+.mc-rocket-line path.recharts-line-curve {
+  stroke: #00f0ff !important;
+  filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.85)) drop-shadow(0 0 12px rgba(0, 240, 255, 0.45));
+}
+
+.mc-endpoint-beacon .beacon-ring {
+  animation: beaconPulse 1.8s infinite ease-out;
+  transform-origin: center;
+}
+
+@keyframes beaconPulse {
+  0% {
+    r: 6;
+    opacity: 0.8;
+  }
+  100% {
+    r: 22;
+    opacity: 0;
+  }
+}
+
+.line.neon-cyan {
+  background: #00f0ff;
+  box-shadow: 0 0 8px #00f0ff;
+}
+
 /* Selected Chip */
 .selected-chip {
   display: flex;
