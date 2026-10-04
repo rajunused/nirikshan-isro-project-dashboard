@@ -958,399 +958,399 @@ export default function App() {
           </section>
 
           {/* ============================================================== */}
-          {/* SECTION 3: CORE ANALYTICAL ENGINES (MODULE A & MODULE B)       */}
+          {/* SECTION 3: MODULE A — POPULATION ANOMALY MATRIX (FULL WIDTH)   */}
           {/* ============================================================== */}
-          <section className="balanced-two-col">
-            {/* Panel A: Population & Anomaly Matrix */}
-            <div id="module-a" className="scroll-anchor" />
-            <div
-              className="panel chart-panel scroll-reveal-card"
-              onMouseMove={handleCardTilt}
-              onMouseLeave={resetCardTilt}
-            >
-              <div className="panel-head">
-                <div>
-                  <div className="section-tag">
-                    <span className="num">A</span> POPULATION & SPATIAL ENGINE
-                  </div>
-                  <h2>Hierarchical Dynamic Population Matrix</h2>
+          <section
+            id="module-a"
+            className="panel chart-panel full-width scroll-reveal-card"
+            onMouseMove={handleCardTilt}
+            onMouseLeave={resetCardTilt}
+          >
+            <div className="panel-head">
+              <div>
+                <div className="section-tag">
+                  <span className="num">A</span> POPULATION & SPATIAL ENGINE
                 </div>
-                <div className="profile-stats">
-                  <span>MEDIAN <b>{useHistoricalBaseline ? '11.4 µA' : '11.8 µA'}</b></span>
-                  <span>MAD <b>{useHistoricalBaseline ? '1.15' : '1.43'}</b></span>
-                  <span>MODIFIED Z <b>&gt; 3.5 REJECT</b></span>
-                </div>
+                <h2>Hierarchical Dynamic Population Matrix</h2>
               </div>
-
-              {/* Sub-Tabs: Z-Score, Mahalanobis Scatter, Wafer Spatial Map, Isolation Forest */}
-              <div className="tabs">
-                {[
-                  ['zscore', 'MODIFIED Z-SCORE'],
-                  ['maha', 'ROBUST MAHALANOBIS'],
-                  ['wafer', 'WAFER SPATIAL MAP'],
-                  ['forest', 'ISOLATION FOREST']
-                ].map(([k, t]) => (
-                  <button
-                    key={k}
-                    className={`tab-btn ${tab === k ? 'active' : ''}`}
-                    onClick={() => setTab(k)}
-                  >
-                    {t}
-                  </button>
-                ))}
+              <div className="profile-stats">
+                <span>MEDIAN <b>{useHistoricalBaseline ? '11.4 µA' : '11.8 µA'}</b></span>
+                <span>MAD <b>{useHistoricalBaseline ? '1.15' : '1.43'}</b></span>
+                <span>MODIFIED Z <b>&gt; 3.5 REJECT</b></span>
               </div>
-
-              {/* Sub-Tab 1: Modified Z-Score Bar Chart */}
-              {tab === 'zscore' && (
-                <div className="chart-wrap">
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart
-                      data={evaluatedComponents.slice(0, 24).map((c) => ({
-                        id: c.id,
-                        name: c.id.slice(-4),
-                        score: Number(c.mad.toFixed(2)),
-                        verdict: c.verdict
-                      }))}
-                      margin={{ top: 12, right: 12, left: -15, bottom: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" vertical={false} />
-                      <XAxis dataKey="name" stroke="#64748b" fontSize={9} tickLine={false} />
-                      <YAxis stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={[0, 8]} />
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            const data = payload[0].payload;
-                            return (
-                              <div className="minimalist-tooltip">
-                                <div className="tooltip-id">{data.id}</div>
-                                <div className="tooltip-row">
-                                  <span>MODIFIED Z-SCORE:</span>
-                                  <b>+{data.score} σ</b>
-                                </div>
-                                <div className="tooltip-row">
-                                  <span>VERDICT:</span>
-                                  <b style={{ color: verdictColor[data.verdict] }}>{data.verdict}</b>
-                                </div>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                      <ReferenceLine y={3.5} stroke="#ef4444" strokeDasharray="3 3" />
-                      <ReferenceLine y={2.0} stroke="#f59e0b" strokeDasharray="2 2" />
-                      <Bar dataKey="score" radius={[4, 4, 0, 0]}>
-                        {evaluatedComponents.slice(0, 24).map((c) => (
-                          <Cell
-                            key={c.id}
-                            fill={verdictColor[c.verdict]}
-                            cursor="pointer"
-                            onClick={() => setSelectedId(c.id)}
-                          />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-
-              {/* Sub-Tab 2: Robust Mahalanobis 2D Covariance Plot */}
-              {tab === 'maha' && (
-                <div className="chart-wrap">
-                  <div className="maha-header-legend">
-                    <span><i className="dot green" /> NOMINAL CORRELATED</span>
-                    <span><i className="dot red" /> TYPE 4 ANOMALY (BREAKS COVARIANCE)</span>
-                  </div>
-                  <ResponsiveContainer width="100%" height={230}>
-                    <ScatterChart margin={{ top: 12, right: 18, left: -15, bottom: 20 }}>
-                      <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" />
-                      <XAxis
-                        type="number"
-                        dataKey="delay"
-                        name="Propagation Delay"
-                        unit=" ns"
-                        stroke="#64748b"
-                        fontSize={9}
-                        domain={[1.4, 3.8]}
-                      />
-                      <YAxis
-                        type="number"
-                        dataKey="leakage"
-                        name="Iddq Leakage"
-                        unit=" µA"
-                        stroke="#64748b"
-                        fontSize={9}
-                        domain={[6, 50]}
-                      />
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            const pt = payload[0].payload;
-                            return (
-                              <div className="minimalist-tooltip">
-                                <div className="tooltip-id">{pt.id}</div>
-                                <div className="tooltip-row"><span>DELAY:</span> <b>{pt.delay} ns</b></div>
-                                <div className="tooltip-row"><span>LEAKAGE:</span> <b>{pt.leakage} µA</b></div>
-                                <div className="tooltip-row"><span>MAHALANOBIS:</span> <b className="text-orange">{pt.md} MAD</b></div>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                      <Scatter
-                        data={mahalanobisData}
-                        onClick={(pt) => setSelectedId(pt.id)}
-                        cursor="pointer"
-                      >
-                        {mahalanobisData.map((entry) => (
-                          <Cell
-                            key={entry.id}
-                            fill={entry.isAnomaly ? '#ef4444' : '#10b981'}
-                            stroke={selectedId === entry.id ? '#ffffff' : 'none'}
-                            strokeWidth={selectedId === entry.id ? 2 : 0}
-                            r={selectedId === entry.id ? 7 : entry.isAnomaly ? 6 : 4}
-                          />
-                        ))}
-                      </Scatter>
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-
-              {/* Sub-Tab 3: Wafer Spatial Map */}
-              {tab === 'wafer' && (
-                <WaferSpatialMap
-                  components={evaluatedComponents}
-                  selectedId={selectedId}
-                  onSelectComponent={(id) => setSelectedId(id)}
-                />
-              )}
-
-              {/* Sub-Tab 4: Isolation Forest Heatmap */}
-              {tab === 'forest' && (
-                <div className="chart-wrap">
-                  <div className="isolation-forest-view">
-                    <div className="forest-grid">
-                      {evaluatedComponents.map((c) => (
-                        <div
-                          key={c.id}
-                          className={`forest-cell ${c.verdict.toLowerCase()} ${
-                            selectedId === c.id ? 'selected' : ''
-                          }`}
-                          onClick={() => setSelectedId(c.id)}
-                          title={`${c.id}: ${c.mad.toFixed(1)} MAD • ${c.verdict}`}
-                        >
-                          <span className="cell-id-sub">{c.id.slice(-4)}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="forest-legend">
-                      <span><i className="dot green" /> ACCEPT (NOMINAL)</span>
-                      <span><i className="dot amber" /> REVIEW (COVARIANCE)</span>
-                      <span><i className="dot red" /> REJECT (RISK)</span>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Panel B: Trajectory & Drift Predictor */}
-            <div id="module-b" className="scroll-anchor" />
-            <div
-              className="panel chart-panel scroll-reveal-card"
-              onMouseMove={handleCardTilt}
-              onMouseLeave={resetCardTilt}
-            >
-              <div className="panel-head">
-                <div>
-                  <div className="section-tag">
-                    <span className="num">B</span> DRIFT FORENSICS & RECALIBRATION
-                  </div>
-                  <h2>Trajectory Prognostics & 96h Inject</h2>
-                </div>
-                <div className="trajectory-header-actions">
-                  {/* Scrubbable Time Stepper */}
-                  <div className="time-stepper-group" title="Scrub inspection milestone">
-                    {['0h', '24h', '96h', '168h'].map((hr) => (
-                      <button
-                        key={hr}
-                        className={`time-step-btn ${activeHour === hr ? 'active' : ''}`}
-                        onClick={() => setActiveHour(hr)}
-                      >
-                        {hr}
-                      </button>
-                    ))}
-                  </div>
+            {/* Sub-Tabs: Z-Score, Mahalanobis Scatter, Wafer Spatial Map, Isolation Forest */}
+            <div className="tabs">
+              {[
+                ['zscore', 'MODIFIED Z-SCORE (MAD)'],
+                ['maha', 'ROBUST MAHALANOBIS (TYPE 4)'],
+                ['wafer', 'WAFER SPATIAL MAP'],
+                ['forest', 'ISOLATION FOREST']
+              ].map(([k, t]) => (
+                <button
+                  key={k}
+                  className={`tab-btn ${tab === k ? 'active' : ''}`}
+                  onClick={() => setTab(k)}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
 
-                  {/* 96h Data Arrival Injection Toggle */}
-                  <label
-                    className="toggle-control"
-                    title="Dynamic 96h injection: Narrows uncertainty corridor P10-P90 or triggers early abort"
+            {/* Sub-Tab 1: Modified Z-Score Bar Chart (All 40 units full width) */}
+            {tab === 'zscore' && (
+              <div className="chart-wrap">
+                <ResponsiveContainer width="100%" height={360}>
+                  <BarChart
+                    data={evaluatedComponents.map((c) => ({
+                      id: c.id,
+                      name: c.id.slice(-4),
+                      score: Number(c.mad.toFixed(2)),
+                      verdict: c.verdict
+                    }))}
+                    margin={{ top: 15, right: 20, left: -10, bottom: 25 }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={has96}
-                      onChange={(e) => setHas96(e.target.checked)}
-                    />
-                    <span className="toggle-track" />
-                    <span className="toggle-text">96H INJECT</span>
-                  </label>
-
-                  {/* Monte Carlo Toggle & Simulation Launcher with Rocket Animation */}
-                  <div className="mc-btn-group">
-                    <button
-                      className={`subtle-btn mc-toggle-btn ${showMonteCarlo ? 'active' : ''}`}
-                      onClick={() => {
-                        if (!showMonteCarlo) {
-                          setShowMonteCarlo(true);
-                          setMcRunId(1);
-                        } else {
-                          setMcRunId((prev) => prev + 1);
-                        }
-                      }}
-                      title="Launch Monte Carlo trajectory simulation with rocket flight drawing animation"
-                    >
-                      <Orbit size={13} className={showMonteCarlo ? 'spin-slow' : ''} />
-                      <span>MONTE CARLO</span>
-                      {showMonteCarlo && <span className="mc-run-chip">#{mcRunId}</span>}
-                    </button>
-                    {showMonteCarlo && (
-                      <button
-                        className="subtle-btn mc-reset-btn"
-                        onClick={() => setShowMonteCarlo(false)}
-                        title="Clear Monte Carlo simulation"
-                      >
-                        <X size={12} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Selected Component Badge & Early Abort Banner */}
-              <div className="selected-chip-row">
-                <div className="selected-chip">
-                  <CircleDot size={14} className="chip-icon" />
-                  <b className="chip-id">{comp.id}</b>
-                  <span className="chip-type">{comp.type}</span>
-                  <i style={{ color: verdictColor[comp.verdict] }} className="chip-verdict">
-                    {comp.verdict}
-                  </i>
-                </div>
-
-                {comp.type === 'ACCELERATING DRIFT' && (
-                  <div className="early-abort-badge">
-                    <AlertTriangle size={12} className="text-red" />
-                    <span>EARLY ABORT CRITERION MET: TYPE 2 LATENT DEFECT</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Trajectory Composed Chart with Rocket Drawer Overlay */}
-              <div className="chart-wrap trajectory" ref={trajectoryChartRef}>
-                <MonteCarloRocketDrawer
-                  containerRef={trajectoryChartRef}
-                  isActive={showMonteCarlo}
-                  runId={mcRunId}
-                  data={trajectory}
-                />
-
-                <ResponsiveContainer width="100%" height={230}>
-                  <ComposedChart data={trajectory} margin={{ top: 15, right: 25, left: 5, bottom: 20 }}>
-                    <defs>
-                      <linearGradient id="healthyBandGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#29B6D1" stopOpacity={0.22} />
-                        <stop offset="100%" stopColor="#29B6D1" stopOpacity={0.02} />
-                      </linearGradient>
-                      <linearGradient id="confidenceCorridorGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#f58220" stopOpacity={0.25} />
-                        <stop offset="100%" stopColor="#f58220" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
                     <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" vertical={false} />
-                    <XAxis dataKey="h" stroke="#64748b" fontSize={10} tickLine={false} />
-                    <YAxis domain={[0, 60]} stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} />
+                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} domain={[0, 8]} />
                     <Tooltip
-                      content={({ active, payload, label }) => {
+                      content={({ active, payload }) => {
                         if (active && payload && payload.length) {
+                          const data = payload[0].payload;
                           return (
                             <div className="minimalist-tooltip">
-                              <div className="tooltip-id">
-                                {comp.id} • INSPECTION: {label}
+                              <div className="tooltip-id">{data.id}</div>
+                              <div className="tooltip-row">
+                                <span>MODIFIED Z-SCORE:</span>
+                                <b>+{data.score} σ</b>
                               </div>
-                              {payload.map((p) => {
-                                if (!p.value || p.name === 'low' || p.name === 'p10') return null;
-                                return (
-                                  <div className="tooltip-row" key={p.name}>
-                                    <span>{p.name.toUpperCase()}:</span>
-                                    <b>{p.value} µA</b>
-                                  </div>
-                                );
-                              })}
+                              <div className="tooltip-row">
+                                <span>VERDICT:</span>
+                                <b style={{ color: verdictColor[data.verdict] }}>{data.verdict}</b>
+                              </div>
                             </div>
                           );
                         }
                         return null;
                       }}
                     />
-                    <Area name="Healthy Baseline" dataKey="high" stroke="none" fill="url(#healthyBandGrad)" />
-                    <Area name="low" dataKey="low" stroke="none" fill="#05080e" />
-                    <Area name="P90 Corridor" dataKey="p90" stroke="none" fill="url(#confidenceCorridorGrad)" />
-                    <Area name="p10" dataKey="p10" stroke="none" fill="#05080e" />
-
-                    {showMonteCarlo && (
-                      <Line
-                        name="MC Sim"
-                        dataKey="mcSim"
-                        stroke="#29B6D1"
-                        strokeWidth={2.8}
-                        dot={false}
-                        className="mc-rocket-line"
-                        isAnimationActive={false}
-                      />
-                    )}
-
-                    <Line
-                      name="Safety Ceiling"
-                      dataKey="ceiling"
-                      stroke="#F59E0B"
-                      strokeWidth={1.5}
-                      strokeDasharray="4 4"
-                      dot={false}
-                    />
-                    <Line
-                      name="Actual Telemetry"
-                      dataKey="actual"
-                      stroke="#29B6D1"
-                      strokeWidth={2.8}
-                      dot={{ r: 4, fill: '#29B6D1', stroke: '#05080e', strokeWidth: 2 }}
-                    />
-                    <Line
-                      name="Predicted Forecast"
-                      dataKey="forecast"
-                      stroke="#F58220"
-                      strokeWidth={2.5}
-                      strokeDasharray="6 4"
-                      dot={{ r: 4, fill: '#F58220', stroke: '#05080e', strokeWidth: 2 }}
-                    />
-                    <ReferenceLine
-                      y={50}
-                      stroke="#EF4444"
-                      strokeDasharray="3 3"
-                      label={{ value: 'MAX 50 µA', fill: '#EF4444', fontSize: 9, position: 'insideTopRight' }}
-                    />
-                  </ComposedChart>
+                    <ReferenceLine y={3.5} stroke="#ef4444" strokeDasharray="3 3" label={{ value: 'REJECT (3.5σ)', fill: '#ef4444', fontSize: 10, position: 'insideTopRight' }} />
+                    <ReferenceLine y={2.0} stroke="#f59e0b" strokeDasharray="2 2" label={{ value: 'REVIEW (2.0σ)', fill: '#f59e0b', fontSize: 10, position: 'insideTopRight' }} />
+                    <Bar dataKey="score" radius={[4, 4, 0, 0]}>
+                      {evaluatedComponents.map((c) => (
+                        <Cell
+                          key={c.id}
+                          fill={verdictColor[c.verdict]}
+                          cursor="pointer"
+                          onClick={() => setSelectedId(c.id)}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
+            )}
 
-              <div className="trajectory-foot">
-                <span><i className="line cyan" /> ACTUAL TELEMETRY</span>
-                <span><i className="line orange" /> PREDICTED HORIZON</span>
-                <span><i className="line amber dashed" /> SAFETY CEILING (dI/dt)</span>
-                <span className="limit">MAX LIMIT: 50 µA</span>
+            {/* Sub-Tab 2: Robust Mahalanobis 2D Covariance Plot (Full width) */}
+            {tab === 'maha' && (
+              <div className="chart-wrap">
+                <div className="maha-header-legend">
+                  <span><i className="dot green" /> NOMINAL CORRELATED CLUSTER</span>
+                  <span><i className="dot red" /> TYPE 4 ANOMALY (BREAKS PHYSICAL COVARIANCE)</span>
+                </div>
+                <ResponsiveContainer width="100%" height={360}>
+                  <ScatterChart margin={{ top: 15, right: 25, left: -5, bottom: 25 }}>
+                    <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" />
+                    <XAxis
+                      type="number"
+                      dataKey="delay"
+                      name="Propagation Delay"
+                      unit=" ns"
+                      stroke="#64748b"
+                      fontSize={10}
+                      domain={[1.4, 3.8]}
+                    />
+                    <YAxis
+                      type="number"
+                      dataKey="leakage"
+                      name="Iddq Leakage"
+                      unit=" µA"
+                      stroke="#64748b"
+                      fontSize={10}
+                      domain={[6, 50]}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const pt = payload[0].payload;
+                          return (
+                            <div className="minimalist-tooltip">
+                              <div className="tooltip-id">{pt.id}</div>
+                              <div className="tooltip-row"><span>DELAY:</span> <b>{pt.delay} ns</b></div>
+                              <div className="tooltip-row"><span>LEAKAGE:</span> <b>{pt.leakage} µA</b></div>
+                              <div className="tooltip-row"><span>MAHALANOBIS:</span> <b className="text-orange">{pt.md} MAD</b></div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Scatter
+                      data={mahalanobisData}
+                      onClick={(pt) => setSelectedId(pt.id)}
+                      cursor="pointer"
+                    >
+                      {mahalanobisData.map((entry) => (
+                        <Cell
+                          key={entry.id}
+                          fill={entry.isAnomaly ? '#ef4444' : '#10b981'}
+                          stroke={selectedId === entry.id ? '#ffffff' : 'none'}
+                          strokeWidth={selectedId === entry.id ? 2 : 0}
+                          r={selectedId === entry.id ? 8 : entry.isAnomaly ? 7 : 5}
+                        />
+                      ))}
+                    </Scatter>
+                  </ScatterChart>
+                </ResponsiveContainer>
               </div>
+            )}
+
+            {/* Sub-Tab 3: Wafer Spatial Map */}
+            {tab === 'wafer' && (
+              <WaferSpatialMap
+                components={evaluatedComponents}
+                selectedId={selectedId}
+                onSelectComponent={(id) => setSelectedId(id)}
+              />
+            )}
+
+            {/* Sub-Tab 4: Isolation Forest Heatmap */}
+            {tab === 'forest' && (
+              <div className="chart-wrap" style={{ minHeight: 340 }}>
+                <div className="isolation-forest-view">
+                  <div className="forest-grid">
+                    {evaluatedComponents.map((c) => (
+                      <div
+                        key={c.id}
+                        className={`forest-cell ${c.verdict.toLowerCase()} ${
+                          selectedId === c.id ? 'selected' : ''
+                        }`}
+                        onClick={() => setSelectedId(c.id)}
+                        title={`${c.id}: ${c.mad.toFixed(1)} MAD • ${c.verdict}`}
+                      >
+                        <span className="cell-id-sub">{c.id.slice(-4)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="forest-legend">
+                    <span><i className="dot green" /> ACCEPT (NOMINAL)</span>
+                    <span><i className="dot amber" /> REVIEW (COVARIANCE)</span>
+                    <span><i className="dot red" /> REJECT (RISK)</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* ============================================================== */}
+          {/* SECTION 4: MODULE B — DRIFT FORENSICS & TRAJECTORY PROGNOSTICS */}
+          {/* ============================================================== */}
+          <section
+            id="module-b"
+            className="panel chart-panel full-width scroll-reveal-card"
+            onMouseMove={handleCardTilt}
+            onMouseLeave={resetCardTilt}
+          >
+            <div className="panel-head">
+              <div>
+                <div className="section-tag">
+                  <span className="num">B</span> DRIFT FORENSICS & RECALIBRATION
+                </div>
+                <h2>Trajectory Prognostics & 96h Inject</h2>
+              </div>
+              <div className="trajectory-header-actions">
+                {/* Scrubbable Time Stepper */}
+                <div className="time-stepper-group" title="Scrub inspection milestone">
+                  {['0h', '24h', '96h', '168h'].map((hr) => (
+                    <button
+                      key={hr}
+                      className={`time-step-btn ${activeHour === hr ? 'active' : ''}`}
+                      onClick={() => setActiveHour(hr)}
+                    >
+                      {hr}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 96h Data Arrival Injection Toggle */}
+                <label
+                  className="toggle-control"
+                  title="Dynamic 96h injection: Narrows uncertainty corridor P10-P90 or triggers early abort"
+                >
+                  <input
+                    type="checkbox"
+                    checked={has96}
+                    onChange={(e) => setHas96(e.target.checked)}
+                  />
+                  <span className="toggle-track" />
+                  <span className="toggle-text">96H INJECT</span>
+                </label>
+
+                {/* Monte Carlo Toggle & Simulation Launcher with Rocket Animation */}
+                <div className="mc-btn-group">
+                  <button
+                    className={`subtle-btn mc-toggle-btn ${showMonteCarlo ? 'active' : ''}`}
+                    onClick={() => {
+                      if (!showMonteCarlo) {
+                        setShowMonteCarlo(true);
+                        setMcRunId(1);
+                      } else {
+                        setMcRunId((prev) => prev + 1);
+                      }
+                    }}
+                    title="Launch Monte Carlo trajectory simulation with rocket flight drawing animation"
+                  >
+                    <Orbit size={13} className={showMonteCarlo ? 'spin-slow' : ''} />
+                    <span>MONTE CARLO</span>
+                    {showMonteCarlo && <span className="mc-run-chip">#{mcRunId}</span>}
+                  </button>
+                  {showMonteCarlo && (
+                    <button
+                      className="subtle-btn mc-reset-btn"
+                      onClick={() => setShowMonteCarlo(false)}
+                      title="Clear Monte Carlo simulation"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Selected Component Badge & Early Abort Banner */}
+            <div className="selected-chip-row">
+              <div className="selected-chip">
+                <CircleDot size={14} className="chip-icon" />
+                <b className="chip-id">{comp.id}</b>
+                <span className="chip-type">{comp.type}</span>
+                <i style={{ color: verdictColor[comp.verdict] }} className="chip-verdict">
+                  {comp.verdict}
+                </i>
+              </div>
+
+              {comp.type === 'ACCELERATING DRIFT' && (
+                <div className="early-abort-badge">
+                  <AlertTriangle size={12} className="text-red" />
+                  <span>EARLY ABORT CRITERION MET: TYPE 2 LATENT DEFECT</span>
+                </div>
+              )}
+            </div>
+
+            {/* Trajectory Composed Chart with Rocket Drawer Overlay (Full width 360px height) */}
+            <div className="chart-wrap trajectory" style={{ height: 360 }} ref={trajectoryChartRef}>
+              <MonteCarloRocketDrawer
+                containerRef={trajectoryChartRef}
+                isActive={showMonteCarlo}
+                runId={mcRunId}
+                data={trajectory}
+              />
+
+              <ResponsiveContainer width="100%" height={360}>
+                <ComposedChart data={trajectory} margin={{ top: 15, right: 30, left: 10, bottom: 25 }}>
+                  <defs>
+                    <linearGradient id="healthyBandGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#29B6D1" stopOpacity={0.22} />
+                      <stop offset="100%" stopColor="#29B6D1" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="confidenceCorridorGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#f58220" stopOpacity={0.25} />
+                      <stop offset="100%" stopColor="#f58220" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" vertical={false} />
+                  <XAxis dataKey="h" stroke="#64748b" fontSize={11} tickLine={false} />
+                  <YAxis domain={[0, 60]} stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="minimalist-tooltip">
+                            <div className="tooltip-id">
+                              {comp.id} • INSPECTION: {label}
+                            </div>
+                            {payload.map((p) => {
+                              if (!p.value || p.name === 'low' || p.name === 'p10') return null;
+                              return (
+                                <div className="tooltip-row" key={p.name}>
+                                  <span>{p.name.toUpperCase()}:</span>
+                                  <b>{p.value} µA</b>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Area name="Healthy Baseline" dataKey="high" stroke="none" fill="url(#healthyBandGrad)" />
+                  <Area name="low" dataKey="low" stroke="none" fill="#05080e" />
+                  <Area name="P90 Corridor" dataKey="p90" stroke="none" fill="url(#confidenceCorridorGrad)" />
+                  <Area name="p10" dataKey="p10" stroke="none" fill="#05080e" />
+
+                  {showMonteCarlo && (
+                    <Line
+                      name="MC Sim"
+                      dataKey="mcSim"
+                      stroke="#29B6D1"
+                      strokeWidth={2.8}
+                      dot={false}
+                      className="mc-rocket-line"
+                      isAnimationActive={false}
+                    />
+                  )}
+
+                  <Line
+                    name="Safety Ceiling"
+                    dataKey="ceiling"
+                    stroke="#F59E0B"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 4"
+                    dot={false}
+                  />
+                  <Line
+                    name="Actual Telemetry"
+                    dataKey="actual"
+                    stroke="#29B6D1"
+                    strokeWidth={2.8}
+                    dot={{ r: 5, fill: '#29B6D1', stroke: '#05080e', strokeWidth: 2 }}
+                  />
+                  <Line
+                    name="Predicted Forecast"
+                    dataKey="forecast"
+                    stroke="#F58220"
+                    strokeWidth={2.5}
+                    strokeDasharray="6 4"
+                    dot={{ r: 5, fill: '#F58220', stroke: '#05080e', strokeWidth: 2 }}
+                  />
+                  <ReferenceLine
+                    y={50}
+                    stroke="#EF4444"
+                    strokeDasharray="3 3"
+                    label={{ value: 'MAX DATASHEET LIMIT (50 µA)', fill: '#EF4444', fontSize: 10, position: 'insideTopRight' }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="trajectory-foot">
+              <span><i className="line cyan" /> ACTUAL TELEMETRY</span>
+              <span><i className="line orange" /> PREDICTED HORIZON</span>
+              <span><i className="line amber dashed" /> SAFETY CEILING (dI/dt)</span>
+              {showMonteCarlo && <span><i className="line neon-cyan" /> MC SIMULATED TRAJECTORY (RUN #{mcRunId})</span>}
+              <span className="limit">MAX LIMIT: 50 µA</span>
             </div>
           </section>
 
