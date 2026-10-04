@@ -53,8 +53,8 @@ QA Lead Engineer: [ISRO-VSSC-8834]   Payload Systems Director: [ISRO-DOS-109]
   };
 
   return (
-    <div className="ncr-modal-backdrop" onClick={onClose}>
-      <div className="ncr-modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className="ncr-modal-backdrop modal-3d-backdrop open" onClick={onClose}>
+      <div className="ncr-modal-card modal-3d-box" onClick={(e) => e.stopPropagation()}>
         {/* Modal Top Bar */}
         <div className="ncr-top-bar">
           <div className="ncr-doc-tag">

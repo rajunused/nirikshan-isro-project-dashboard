@@ -3,6 +3,7 @@ import {
   Activity,
   Layers3,
   Orbit,
+  BarChart3,
   Target,
   Thermometer,
   Radio,
@@ -45,6 +46,13 @@ export default function CommandSidebar({
       type: 'scroll'
     },
     {
+      id: 'adv-viz-suite',
+      label: 'ADVANCED DATA & DPAT SUITE',
+      desc: 'Outlier Bell Curve, Radar & Scatter',
+      Icon: BarChart3,
+      type: 'scroll'
+    },
+    {
       id: 'decision-engine',
       label: 'DECISION & EXPLAINABILITY',
       desc: 'Risk Fusion, SHAP & Gated Action',
@@ -77,9 +85,16 @@ export default function CommandSidebar({
     }
   ];
 
-  const handleItemClick = (item) => {
+  const handleItemClick = (e, item) => {
+    // Record click position on document root for 3D shared-element expanding origin
+    const rect = e.currentTarget.getBoundingClientRect();
+    const originX = `${((rect.left + rect.width / 2) / window.innerWidth) * 100}%`;
+    const originY = `${((rect.top + rect.height / 2) / window.innerHeight) * 100}%`;
+    document.documentElement.style.setProperty('--modal-origin-x', originX);
+    document.documentElement.style.setProperty('--modal-origin-y', originY);
+
     if (item.type === 'modal' && item.action) {
-      item.action();
+      item.action(e);
     } else {
       if (onSelectSection) onSelectSection(item.id);
       const targetEl = document.getElementById(item.id);
@@ -110,7 +125,7 @@ export default function CommandSidebar({
               onMouseEnter={() => setHoveredItem(item.id)}
               onMouseLeave={() => setHoveredItem(null)}
             >
-              {/* Rotating Illuminated Orbital Ring with Ion Thruster Trail (Space Effect) */}
+              {/* Rotating Illuminated Orbital Ring with Ion Thruster Trail (Novel Space Effect) */}
               {isActive && (
                 <div className="orbital-active-ring">
                   <svg className="orbital-svg-track" viewBox="0 0 54 54">
@@ -138,7 +153,7 @@ export default function CommandSidebar({
                       cy="27"
                       r="19"
                       fill="none"
-                      stroke="rgba(41, 182, 209, 0.3)"
+                      stroke="rgba(41, 182, 209, 0.35)"
                       strokeWidth="1"
                       strokeDasharray="15 35"
                       className="orbit-counter-circle"
@@ -152,10 +167,11 @@ export default function CommandSidebar({
               {/* The Command Button */}
               <button
                 className={`dock-icon-btn ${isActive ? 'btn-active' : ''}`}
-                onClick={() => handleItemClick(item)}
+                onClick={(e) => handleItemClick(e, item)}
                 title={item.label}
+                aria-label={item.label}
               >
-                {/* Corona Shockwave Pulse on Hover */}
+                {/* Circular Shockwave / Corona Pulse on Hover */}
                 {isHovered && <span className="corona-pulse-wave" />}
                 <Icon size={18} className="dock-icon" />
               </button>

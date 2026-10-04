@@ -53,8 +53,8 @@ export default function ChamberMonitorModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="chamber-modal-backdrop" onClick={onClose}>
-      <div className="chamber-modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className="chamber-modal-backdrop modal-3d-backdrop open" onClick={onClose}>
+      <div className="chamber-modal-card modal-3d-box" onClick={(e) => e.stopPropagation()}>
         {/* Modal Header */}
         <div className="chamber-modal-header">
           <div className="chamber-title-group">

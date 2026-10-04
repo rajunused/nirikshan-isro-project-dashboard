@@ -23,8 +23,8 @@ export default function ActionDispositionModal({
   };
 
   return (
-    <div className="action-modal-backdrop" onClick={onClose}>
-      <div className="action-modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className="action-modal-backdrop modal-3d-backdrop open" onClick={onClose}>
+      <div className="action-modal-card modal-3d-box" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="action-modal-header">
           <div className="action-title-group">

@@ -101,7 +101,20 @@ export default function SpaceNewsDrawer({ isOpen, onClose, onOpen }) {
   return (
     <>
       {/* --- Subtle Scrolling Ticker Header Bar --- */}
-      <div className="space-news-ticker-bar" onClick={onOpen} role="button" tabIndex={0} title="Click to open Live Orbital Intelligence Drawer">
+      <div
+        className="space-news-ticker-bar"
+        onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const originX = `${((rect.left + rect.width / 2) / window.innerWidth) * 100}%`;
+          const originY = `${((rect.top + rect.height / 2) / window.innerHeight) * 100}%`;
+          document.documentElement.style.setProperty('--modal-origin-x', originX);
+          document.documentElement.style.setProperty('--modal-origin-y', originY);
+          onOpen();
+        }}
+        role="button"
+        tabIndex={0}
+        title="Click to open Live Orbital Intelligence Drawer"
+      >
         <div className="ticker-left-badge">
           <span className="live-indicator-beacon" />
           <Radio size={12} className="ticker-icon" />
@@ -123,15 +136,15 @@ export default function SpaceNewsDrawer({ isOpen, onClose, onOpen }) {
         </div>
 
         <div className="ticker-right-cta">
-          <span className="ticker-cta-text">VIEW FEED</span>
+          <span className="ticker-cta-text">EXPAND ORBITAL DISPATCH</span>
           <ExternalLink size={11} />
         </div>
       </div>
 
-      {/* --- Slide-Out Glass News Drawer --- */}
+      {/* --- Slide-Out Glass News Drawer with 3D Morph Effect --- */}
       {isOpen && (
-        <div className="news-drawer-backdrop" onClick={onClose}>
-          <div className="news-drawer-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="news-drawer-backdrop modal-3d-backdrop open" onClick={onClose}>
+          <div className="news-drawer-panel modal-3d-box" onClick={(e) => e.stopPropagation()}>
             {/* Drawer Header */}
             <div className="news-drawer-header">
               <div className="drawer-title-group">

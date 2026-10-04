@@ -48,7 +48,9 @@ import {
   Printer,
   UserCheck,
   Globe,
-  Info
+  Info,
+  Radar as RadarIcon,
+  Maximize2
 } from 'lucide-react';
 
 import SpaceBackground from './SpaceBackground';
@@ -63,6 +65,7 @@ import ChamberMonitorModal from './ChamberMonitorModal';
 import NonConformanceReportModal from './NonConformanceReportModal';
 import ActionDispositionModal from './ActionDispositionModal';
 import CommandSidebar from './CommandSidebar';
+import AdvancedDataVisualizationSuite from './AdvancedDataVisualizationSuite';
 
 // Multi-lot simulated flight components dataset (MIL-STD-883 Class V Flight Hardware)
 const lotDatasets = {
@@ -148,6 +151,7 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [filterVerdict, setFilterVerdict] = useState('ALL');
   const [activeSection, setActiveSection] = useState('overview');
+  const [radarOrScatter, setRadarOrScatter] = useState('radar'); // 'radar' | 'scatter'
 
   // Interactive Dispositions State
   const [dispositions, setDispositions] = useState({});
@@ -159,6 +163,9 @@ export default function App() {
   const [isChamberOpen, setIsChamberOpen] = useState(false);
   const [isNCROpen, setIsNCROpen] = useState(false);
   const [isDispositionOpen, setIsDispositionOpen] = useState(false);
+
+  // Is any modal open for background motion blur & scale down
+  const isAnyModalOpen = isNewsOpen || isChamberOpen || isNCROpen || isDispositionOpen;
 
   // 3D Card Subtle Mouse Tilt Handler (Max 3.5 deg for pristine aerospace ergonomics)
   const handleCardTilt = (e) => {
@@ -174,6 +181,18 @@ export default function App() {
   const resetCardTilt = (e) => {
     const card = e.currentTarget;
     card.style.transform = `perspective(1200px) rotateX(0deg) rotateY(0deg) translateZ(0px)`;
+  };
+
+  // Helper to open modals while setting the 3D shared-element transform origin
+  const openModalWithOrigin = (setter, e) => {
+    if (e && e.currentTarget) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const originX = `${((rect.left + rect.width / 2) / window.innerWidth) * 100}%`;
+      const originY = `${((rect.top + rect.height / 2) / window.innerHeight) * 100}%`;
+      document.documentElement.style.setProperty('--modal-origin-x', originX);
+      document.documentElement.style.setProperty('--modal-origin-y', originY);
+    }
+    setter(true);
   };
 
   // 3D Scroll Reveal Effect using IntersectionObserver
@@ -193,23 +212,16 @@ export default function App() {
     cards.forEach((c) => observer.observe(c));
 
     return () => observer.disconnect();
-  }, [lot, tab]);
+  }, [lot, tab, radarOrScatter]);
 
   // Dynamic components evaluation based on lot, slope, risk appetite, and small-lot fallback
   const rawComponents = lotDatasets[lot] || lotDatasets[lots[0]];
   const evaluatedComponents = useMemo(() => {
-    // Robust population statistics: Median and MAD
-    // If small-lot fallback is engaged, blend current lot with historical flight archive (N=500, Median=11.4, MAD=1.15)
-    const baseMedian = useHistoricalBaseline ? 11.4 : 11.8;
-    const baseMAD = useHistoricalBaseline ? 1.15 : 1.43;
-
     return rawComponents.map((c) => {
-      // Cost-sensitivity slider controls strictness (from 1x commercial to 10x flight assurance)
       const strictnessMultiplier = 1.0 + (risk - 50) * 0.015;
       const madThresholdReview = 2.0 / strictnessMultiplier;
       const madThresholdReject = 4.0 / strictnessMultiplier;
 
-      // Override with QA manual disposition if inspector signed off
       const customDisp = dispositions[c.id];
 
       let verdict = 'ACCEPT';
@@ -226,7 +238,6 @@ export default function App() {
       }
 
       const forecast = c.baseline[3];
-      // Uncertainty corridor: 90% confidence interval (narrows sharply when 96h telemetry is injected)
       const ciSpread = has96 ? c.mad * 0.45 : c.mad * 1.25;
       const ci = [
         Math.max(8, Number((forecast - ciSpread).toFixed(1))),
@@ -285,21 +296,17 @@ export default function App() {
       { low: 11, high: 20 }
     ];
 
-    // Stochastic seed variance for dynamic Monte Carlo trajectory runs
     const seedVariation = Math.sin(mcRunId * 12.9898) * 3.8;
     const driftFactor = (comp.slope || 0.05) * 1.15 + Math.cos(mcRunId * 7.823) * 0.035;
 
     return hours.map((h, i) => {
       const actualVal = comp.baseline[i];
-      // If has96 is false, hide 96h actual telemetry to simulate pre-96h early prediction
       const showActual = i < 2 || (i === 2 ? has96 : true);
 
-      // Primary simulated Monte Carlo trajectory line drawn by the rocket
       const mcSimVal = Number(
         (actualVal + i * 24 * driftFactor + (i >= 2 ? seedVariation : seedVariation * 0.25)).toFixed(1)
       );
 
-      // Prediction interval corridor (P10 to P90)
       const corridorWidth = has96 ? (i >= 2 ? 2.4 : 1.2) : (i >= 2 ? 6.8 : 2.0);
       const p10 = Number(Math.max(6, (actualVal - corridorWidth)).toFixed(1));
       const p90 = Number((actualVal + corridorWidth * 1.2).toFixed(1));
@@ -322,9 +329,7 @@ export default function App() {
 
   // Multivariate Mahalanobis Scatter Data (Leakage vs Propagation Delay)
   const mahalanobisData = useMemo(() => {
-    return evaluatedComponents.map((c, i) => {
-      // Normal correlation: higher delay correlates with slightly lower leakage
-      // Type 4 anomalies break this physical covariance
+    return evaluatedComponents.map((c) => {
       const isCovarianceAnomaly = c.type.includes('MULTIVARIATE');
       const mahalanobisDistance = Number(
         (Math.sqrt(Math.pow((c.baseline[1] - 11.4) / 1.43, 2) + Math.pow((c.delay - 1.8) / 0.25, 2)) +
@@ -342,6 +347,32 @@ export default function App() {
       };
     });
   }, [evaluatedComponents]);
+
+  // 6-Axis Radar Geometry for Right Column
+  const radarMetrics = useMemo(() => {
+    const leak = Math.min(100, ((comp.baseline?.[1] || 12) / 50) * 100);
+    const iddq = Math.min(100, ((comp.baseline?.[0] || 10) / 30) * 100);
+    const del = Math.min(100, (((comp.delay || 2.0) - 1.0) / 3.0) * 100);
+    const d24 = Math.min(100, (Math.max(0, (comp.baseline?.[1] || 12) - (comp.baseline?.[0] || 10)) / 10) * 100);
+    const d96 = Math.min(100, (Math.max(0, (comp.baseline?.[2] || 14) - (comp.baseline?.[0] || 10)) / 25) * 100);
+    const zsc = Math.min(100, ((comp.mad || 1.0) / 6.0) * 100);
+
+    const values = [leak, iddq, del, d24, d96, zsc];
+    const base = [24, 28, 45, 20, 22, 18];
+    const center = { x: 140, y: 110 };
+    const radius = 70;
+
+    const getPt = (val, idx) => {
+      const angle = (Math.PI * 2 / 6) * idx - Math.PI / 2;
+      const r = (val / 100) * radius;
+      return { x: center.x + r * Math.cos(angle), y: center.y + r * Math.sin(angle) };
+    };
+
+    const unitPts = values.map((v, i) => `${getPt(v, i).x},${getPt(v, i).y}`).join(' ');
+    const basePts = base.map((v, i) => `${getPt(v, i).x},${getPt(v, i).y}`).join(' ');
+
+    return { center, radius, values, base, unitPts, basePts, getPt };
+  }, [comp]);
 
   // Run Batch Diagnostic Simulator
   const runDiagnostic = () => {
@@ -385,7 +416,7 @@ export default function App() {
   };
 
   return (
-    <div className="app">
+    <div className={`app ${isAnyModalOpen ? 'modal-active' : ''}`}>
       {/* 3D Cosmic Background */}
       <SpaceBackground />
       <ShootingStars />
@@ -399,19 +430,8 @@ export default function App() {
       {/* Live Rocket Telemetry & CAD Simulator */}
       <RocketAnimation active={rocketActive} onClose={() => setRocketActive(false)} />
 
-      {/* Floating Aerospace Command Sidebar */}
-      <CommandSidebar
-        activeSection={activeSection}
-        onSelectSection={(sec) => setActiveSection(sec)}
-        onOpenChamber={() => setIsChamberOpen(true)}
-        onOpenNews={() => setIsNewsOpen(true)}
-        onOpenNCR={() => setIsNCROpen(true)}
-      />
-
-      {/* Live In-Chamber Environment Monitor Modal */}
+      {/* Modals with 3D Zoom Morph Transition */}
       <ChamberMonitorModal isOpen={isChamberOpen} onClose={() => setIsChamberOpen(false)} />
-
-      {/* Official ISRO Non-Conformance Report (NCR) Modal */}
       <NonConformanceReportModal
         isOpen={isNCROpen}
         onClose={() => setIsNCROpen(false)}
@@ -419,8 +439,6 @@ export default function App() {
         lot={lot}
         slope={slope}
       />
-
-      {/* QA Engineering Disposition Modal */}
       <ActionDispositionModal
         isOpen={isDispositionOpen}
         onClose={() => setIsDispositionOpen(false)}
@@ -448,35 +466,26 @@ export default function App() {
           <div className="isro-official-badge" title="ISRO - Indian Space Research Organisation">
             <IsroLogo className="isro-logo-img" />
           </div>
-          <div className="brand-info">
-            <div className="eyebrow">
-              <span className="isro-hindi">भारतीय अंतरिक्ष अनुसंधान संगठन</span>
-              <i>•</i>
-              <span>ISRO / DOS HIGH-RELIABILITY ESS HUB</span>
+          <div className="mission-title-group">
+            <div className="org-subtext">
+              <span className="sat-indicator" /> ISRO • DEPARTMENT OF SPACE • QUALITY ASSURANCE DIRECTORATE
             </div>
-            <div className="subline">
-              SIH-PS170 <span className="slash">/</span> MISSION-CRITICAL LATENT-DEFECT SCREENING CONSOLE
+            <div className="project-title-row">
+              <span className="project-acronym">NIRIKSHAN</span>
+              <span className="project-dash">/</span>
+              <span className="project-desc">AI-DRIVEN DYNAMIC ESS INTELLIGENCE</span>
+              <span className="ps-tag">PS170</span>
             </div>
           </div>
         </div>
 
         <div className="brand-right">
-          {/* ATE Sanity Checker & In-Chamber Context Display */}
-          <div
-            className="chamber-quick-pill"
-            onClick={() => setIsChamberOpen(true)}
-            role="button"
-            tabIndex={0}
-            title="Click to open In-Chamber Environment Telemetry"
-          >
-            <Thermometer size={13} className="text-orange" />
-            <div className="chamber-pill-meta">
-              <span>CHAMBER: 125.0°C / 3.3V</span>
-              <small>ATE SANITY: VERIFIED (0 FAILS)</small>
-            </div>
+          <div className="live-status-pill">
+            <span className="pulse-dot-green" />
+            <span className="status-label">GROUND STATION TELEMETRY</span>
+            <span className="spec-badge">MIL-STD-883 CLASS V</span>
           </div>
 
-          {/* Rocket Simulation Interactive Toggle */}
           <button
             id="rocket-toggle"
             className={`rocket-launch-toggle ${rocketActive ? 'active' : ''}`}
@@ -497,7 +506,7 @@ export default function App() {
 
           <div className="product-identity">
             <span className="product-title">NIRIKSHAN</span>
-            <small>AEROSPACE CONSOLE V4.0</small>
+            <small>AEROSPACE CONSOLE V4.2</small>
           </div>
         </div>
       </header>
@@ -506,744 +515,997 @@ export default function App() {
       <SpaceNewsDrawer
         isOpen={isNewsOpen}
         onClose={() => setIsNewsOpen(false)}
-        onOpen={() => setIsNewsOpen(true)}
+        onOpen={(e) => openModalWithOrigin(setIsNewsOpen, e)}
       />
 
-      {/* --- Main Dashboard Container --- */}
-      <main className="main-console-content">
-        {/* Section 1: Flight Telemetry Overview (Hero & Control Strip) */}
-        <div id="overview" className="scroll-anchor" />
+      {/* --- Mission Cockpit Zero-Dead-Space Container --- */}
+      <div className="cockpit-container">
+        {/* Left Floating Rail: Aerospace Command Dock */}
+        <aside className="cockpit-left-rail">
+          <CommandSidebar
+            activeSection={activeSection}
+            onSelectSection={(sec) => setActiveSection(sec)}
+            onOpenChamber={(e) => openModalWithOrigin(setIsChamberOpen, e)}
+            onOpenNews={(e) => openModalWithOrigin(setIsNewsOpen, e)}
+            onOpenNCR={(e) => openModalWithOrigin(setIsNCROpen, e)}
+          />
+        </aside>
 
-        <section
-          className="hero scroll-reveal-card"
-          onMouseMove={handleCardTilt}
-          onMouseLeave={resetCardTilt}
-        >
-          <div>
-            <div className="kicker">
-              <Orbit size={14} className="kicker-sun-icon" /> ISRO SIH-PS170 MISSION ASSURANCE CONSOLE
+        {/* Main Telemetry & Diagnostic Cockpit Area */}
+        <main className="cockpit-workspace">
+          {/* Top Control & KPI Zone */}
+          <div id="overview" className="scroll-anchor" />
+
+          {/* Hero Mission Assurance Banner */}
+          <section
+            className="hero scroll-reveal-card"
+            onMouseMove={handleCardTilt}
+            onMouseLeave={resetCardTilt}
+          >
+            <div>
+              <div className="kicker">
+                <Orbit size={14} className="kicker-sun-icon" /> ISRO SIH-PS170 MISSION ASSURANCE CONSOLE
+              </div>
+              <h1>
+                Dynamic ESS <span className="highlight-intelligence">Intelligence</span> & Latent-Defect Screening
+              </h1>
+              <p>
+                Autonomous real-time trajectory screening for satellite avionics and rad-hard space payloads.
+                Detects accelerating leakage drift, non-linear gate-oxide degradation, and spatial wafer neighbor risk before flight integration.
+              </p>
             </div>
-            <h1>
-              Dynamic ESS <span className="highlight-intelligence">Intelligence</span> & Latent-Defect Screening
-            </h1>
-            <p>
-              Autonomous real-time trajectory screening for satellite avionics and rad-hard space payloads.
-              Detects accelerating leakage drift, non-linear gate-oxide degradation, and spatial wafer neighbor risk before flight integration.
-            </p>
-          </div>
 
-          <div className="hero-actions">
-            {/* Real-time Telemetry Status Pill */}
-            <div className="cosmic-status-badge">
-              <span className="status-indicator-beacon" />
-              <div className="badge-meta">
-                <span className="badge-title">GROUND-STATION CONSOLE</span>
-                <span className="badge-desc">100% CLIENT-SIDE AUTONOMOUS</span>
+            <div className="hero-actions">
+              <div className="cosmic-status-badge">
+                <span className="status-indicator-beacon" />
+                <div className="badge-meta">
+                  <span className="badge-title">GROUND-STATION CONSOLE</span>
+                  <span className="badge-desc">100% CLIENT-SIDE AUTONOMOUS</span>
+                </div>
+              </div>
+
+              <button
+                id="run-diagnostic-btn"
+                className={`primary-action-btn ${running ? 'running' : ''}`}
+                onClick={runDiagnostic}
+                disabled={running}
+              >
+                {running ? (
+                  <>
+                    <RefreshCw size={15} className="spin-icon" />
+                    <span>DIAGNOSING 40 UNITS…</span>
+                  </>
+                ) : (
+                  <>
+                    <Play size={15} fill="currentColor" />
+                    <span>RUN STATISTICAL BATCH DIAGNOSTIC</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </section>
+
+          {/* Control Strip Panel */}
+          <section
+            className="control-strip panel scroll-reveal-card"
+            onMouseMove={handleCardTilt}
+            onMouseLeave={resetCardTilt}
+          >
+            {/* Active Lot Selector */}
+            <div className="field-group">
+              <span className="field-label">ACTIVE FLIGHT SCREENING LOT</span>
+              <div className="select-box">
+                <select value={lot} onChange={(e) => setLot(e.target.value)}>
+                  {lots.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} />
               </div>
             </div>
 
-            {/* Run Batch Diagnostic Button */}
-            <button
-              id="run-diagnostic-btn"
-              className={`primary-action-btn ${running ? 'running' : ''}`}
-              onClick={runDiagnostic}
-              disabled={running}
-            >
-              {running ? (
-                <>
-                  <RefreshCw size={15} className="spin-icon" />
-                  <span>DIAGNOSING 40 UNITS…</span>
-                </>
-              ) : (
-                <>
-                  <Play size={15} fill="currentColor" />
-                  <span>RUN STATISTICAL BATCH DIAGNOSTIC</span>
-                </>
-              )}
-            </button>
-          </div>
-        </section>
+            <div className="panel-divider" />
 
-        {/* Control Strip Panel */}
-        <section
-          className="control-strip panel scroll-reveal-card"
-          onMouseMove={handleCardTilt}
-          onMouseLeave={resetCardTilt}
-        >
-          {/* Active Lot Selector */}
-          <div className="field-group">
-            <span className="field-label">ACTIVE FLIGHT SCREENING LOT</span>
-            <div className="select-box">
-              <select value={lot} onChange={(e) => setLot(e.target.value)}>
-                {lots.map((l) => (
-                  <option key={l} value={l}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} />
-            </div>
-          </div>
-
-          <div className="panel-divider" />
-
-          {/* Cost-Sensitivity / Risk Appetite Slider */}
-          <div className="slider-field-group">
-            <div className="slider-header">
-              <span className="field-label">COST-SENSITIVITY (FP VS FN PENALTY)</span>
-              <strong className="slider-val">
-                {risk}
-                <small>%</small>
-              </strong>
-            </div>
-            <input
-              type="range"
-              min="10"
-              max="90"
-              value={risk}
-              onChange={(e) => setRisk(Number(e.target.value))}
-              aria-label="Risk Appetite Slider"
-            />
-            <div className="range-notes">
-              <span>COMMERCIAL (1x)</span>
-              <span>ISRO FLIGHT ASSURANCE (10x)</span>
-            </div>
-          </div>
-
-          <div className="panel-divider" />
-
-          {/* Safety Slope Slider */}
-          <div className="slider-field-group">
-            <div className="slider-header">
-              <span className="field-label">SAFETY SLOPE THRESHOLD (MAX-DRIFT dI/dt)</span>
-              <strong className="slider-val">
-                {slope.toFixed(2)}
-                <small> µA/h</small>
-              </strong>
-            </div>
-            <input
-              type="range"
-              min="0.02"
-              max="0.20"
-              step="0.01"
-              value={slope}
-              onChange={(e) => setSlope(Number(e.target.value))}
-              aria-label="Safety Slope Threshold"
-            />
-            <div className="range-notes">
-              <span>CONSERVATIVE (0.02)</span>
-              <span>PERMISSIVE (0.20)</span>
-            </div>
-          </div>
-
-          <div className="panel-divider" />
-
-          {/* Small Lot Fallback Toggle */}
-          <div className="field-group small-lot-box">
-            <span className="field-label">SMALL LOT ROBUST FALLBACK</span>
-            <label className="toggle-control" title="Blend with historical flight archive to prevent bad-lot masking">
+            {/* Cost-Sensitivity / Risk Appetite Slider */}
+            <div className="slider-field-group">
+              <div className="slider-header">
+                <span className="field-label">COST-SENSITIVITY (FP VS FN PENALTY)</span>
+                <strong className="slider-val">
+                  {risk}
+                  <small>%</small>
+                </strong>
+              </div>
               <input
-                type="checkbox"
-                checked={useHistoricalBaseline}
-                onChange={(e) => setUseHistoricalBaseline(e.target.checked)}
+                type="range"
+                min="10"
+                max="90"
+                value={risk}
+                onChange={(e) => setRisk(Number(e.target.value))}
+                aria-label="Risk Appetite Slider"
               />
-              <span className="toggle-track" />
-              <span className="toggle-text">
-                {useHistoricalBaseline ? 'BLENDED (N=500)' : 'LOT ONLY'}
-              </span>
-            </label>
-          </div>
-        </section>
+              <div className="range-notes">
+                <span>COMMERCIAL (1x)</span>
+                <span>ISRO FLIGHT ASSURANCE (10x)</span>
+              </div>
+            </div>
 
-        {/* Interactive KPI Filter Grid */}
-        <section className="kpi-grid scroll-reveal-card">
-          {[
-            {
-              id: 'ALL',
-              label: 'TOTAL SCREENED',
-              num: kpiStats.total,
-              note: `MIL-STD-883 CLASS V • ${lot.split('/')[0].trim()}`,
-              Icon: Layers3,
-              color: 'cyan'
-            },
-            {
-              id: 'ACCEPT',
-              label: 'FLIGHT ACCEPTED',
-              num: kpiStats.accepted,
-              note: `${kpiStats.acceptPct}% CONFORMS TO SAFETY LIMITS`,
-              Icon: CheckCircle2,
-              color: 'green'
-            },
-            {
-              id: 'REVIEW',
-              label: 'REVIEW REQUIRED',
-              num: kpiStats.review,
-              note: 'ELEVATED COVARIANCE OR EDGE DIE',
-              Icon: AlertTriangle,
-              color: 'amber'
-            },
-            {
-              id: 'REJECT',
-              label: 'LATENT DEFECT RISK',
-              num: kpiStats.reject,
-              note: 'EXCEEDS DRIFT OR HIGH START',
-              Icon: Zap,
-              color: 'red'
-            }
-          ].map(({ id, label, num, note, Icon, color }) => (
-            <button
-              key={id}
-              className={`kpi-card panel ${filterVerdict === id ? 'active-filter' : ''}`}
-              onClick={() => setFilterVerdict(filterVerdict === id && id !== 'ALL' ? 'ALL' : id)}
-              onMouseMove={handleCardTilt}
-              onMouseLeave={resetCardTilt}
-              title={`Click to filter list by ${label}`}
-            >
-              <div className={`icon-box ${color}`}>
-                <Icon size={18} />
-              </div>
-              <div className="kpi-content">
-                <div className="field-label">{label}</div>
-                <div className="kpi-number">{num}</div>
-                <div className="kpi-note">{note}</div>
-              </div>
-              <div className="kpi-spark">
-                <span style={{ height: '35%' }} />
-                <span style={{ height: '65%' }} />
-                <span style={{ height: '42%' }} />
-                <span style={{ height: '88%' }} />
-                <span style={{ height: '55%' }} />
-                <span style={{ height: '100%' }} />
-              </div>
-            </button>
-          ))}
-        </section>
+            <div className="panel-divider" />
 
-        {/* Section 2: Module A & Module B Dual Analytical Columns */}
-        <section className="two-col">
-          {/* Panel A: Population & Anomaly Matrix */}
-          <div id="module-a" className="scroll-anchor" />
-          <div
-            className="panel chart-panel scroll-reveal-card"
-            onMouseMove={handleCardTilt}
-            onMouseLeave={resetCardTilt}
-          >
-            <div className="panel-head">
-              <div>
-                <div className="section-tag">
-                  <span className="num">A</span> POPULATION & SPATIAL ENGINE
+            {/* Safety Slope Slider */}
+            <div className="slider-field-group">
+              <div className="slider-header">
+                <span className="field-label">SAFETY SLOPE THRESHOLD (MAX-DRIFT dI/dt)</span>
+                <strong className="slider-val">
+                  {slope.toFixed(2)}
+                  <small> µA/h</small>
+                </strong>
+              </div>
+              <input
+                type="range"
+                min="0.02"
+                max="0.20"
+                step="0.01"
+                value={slope}
+                onChange={(e) => setSlope(Number(e.target.value))}
+                aria-label="Safety Slope Threshold"
+              />
+              <div className="range-notes">
+                <span>CONSERVATIVE (0.02)</span>
+                <span>PERMISSIVE (0.20)</span>
+              </div>
+            </div>
+
+            <div className="panel-divider" />
+
+            {/* Small Lot Fallback Toggle */}
+            <div className="field-group small-lot-box">
+              <span className="field-label">SMALL LOT ROBUST FALLBACK</span>
+              <label className="toggle-control" title="Blend with historical flight archive to prevent bad-lot masking">
+                <input
+                  type="checkbox"
+                  checked={useHistoricalBaseline}
+                  onChange={(e) => setUseHistoricalBaseline(e.target.checked)}
+                />
+                <span className="toggle-track" />
+                <span className="toggle-text">
+                  {useHistoricalBaseline ? 'BLENDED (N=500)' : 'LOT ONLY'}
+                </span>
+              </label>
+            </div>
+          </section>
+
+          {/* Interactive KPI Filter Grid */}
+          <section className="kpi-grid scroll-reveal-card">
+            {[
+              {
+                id: 'ALL',
+                label: 'TOTAL SCREENED',
+                num: kpiStats.total,
+                note: `MIL-STD-883 CLASS V • ${lot.split('/')[0].trim()}`,
+                Icon: Layers3,
+                color: 'cyan'
+              },
+              {
+                id: 'ACCEPT',
+                label: 'FLIGHT ACCEPTED',
+                num: kpiStats.accepted,
+                note: `${kpiStats.acceptPct}% CONFORMS TO SAFETY LIMITS`,
+                Icon: CheckCircle2,
+                color: 'green'
+              },
+              {
+                id: 'REVIEW',
+                label: 'REVIEW REQUIRED',
+                num: kpiStats.review,
+                note: 'ELEVATED COVARIANCE OR EDGE DIE',
+                Icon: AlertTriangle,
+                color: 'amber'
+              },
+              {
+                id: 'REJECT',
+                label: 'LATENT DEFECT RISK',
+                num: kpiStats.reject,
+                note: 'EXCEEDS DRIFT OR HIGH START',
+                Icon: Zap,
+                color: 'red'
+              }
+            ].map(({ id, label, num, note, Icon, color }) => (
+              <button
+                key={id}
+                className={`kpi-card panel ${filterVerdict === id ? 'active-filter' : ''}`}
+                onClick={() => setFilterVerdict(filterVerdict === id && id !== 'ALL' ? 'ALL' : id)}
+                onMouseMove={handleCardTilt}
+                onMouseLeave={resetCardTilt}
+                title={`Click to filter list by ${label}`}
+              >
+                <div className={`icon-box ${color}`}>
+                  <Icon size={18} />
                 </div>
-                <h2>Hierarchical Dynamic Population Matrix</h2>
-              </div>
-              <div className="profile-stats">
-                <span>
-                  MEDIAN <b>{useHistoricalBaseline ? '11.4 µA' : '11.8 µA'}</b>
-                </span>
-                <span>
-                  MAD <b>{useHistoricalBaseline ? '1.15' : '1.43'}</b>
-                </span>
-                <span>
-                  MODIFIED Z <b>&gt; 3.5 REJECT</b>
-                </span>
-              </div>
-            </div>
+                <div className="kpi-content">
+                  <div className="field-label">{label}</div>
+                  <div className="kpi-number">{num}</div>
+                  <div className="kpi-note">{note}</div>
+                </div>
+                <div className="kpi-spark">
+                  <span style={{ height: '35%' }} />
+                  <span style={{ height: '65%' }} />
+                  <span style={{ height: '42%' }} />
+                  <span style={{ height: '88%' }} />
+                  <span style={{ height: '55%' }} />
+                  <span style={{ height: '100%' }} />
+                </div>
+              </button>
+            ))}
+          </section>
 
-            {/* Sub-Tabs: Z-Score, Mahalanobis Scatter, Wafer Spatial Map, Isolation Forest */}
-            <div className="tabs">
-              {[
-                ['zscore', 'MODIFIED Z-SCORE (MAD)'],
-                ['maha', 'ROBUST MAHALANOBIS (TYPE 4)'],
-                ['wafer', 'WAFER SPATIAL DEFECT MAP'],
-                ['forest', 'ISOLATION FOREST HEATMAP']
-              ].map(([k, t]) => (
-                <button
-                  key={k}
-                  className={`tab-btn ${tab === k ? 'active' : ''}`}
-                  onClick={() => setTab(k)}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-
-            {/* Sub-Tab 1: Modified Z-Score Bar Chart */}
-            {tab === 'zscore' && (
-              <div className="chart-wrap">
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart
-                    data={evaluatedComponents.slice(0, 24).map((c) => ({
-                      id: c.id,
-                      name: c.id.slice(-4),
-                      score: Number(c.mad.toFixed(2)),
-                      verdict: c.verdict
-                    }))}
-                    margin={{ top: 12, right: 12, left: -10, bottom: 20 }}
+          {/* ============================================================== */}
+          {/* --- CORE 3-COLUMN MISSION COCKPIT ZERO-DEAD-SPACE GRID ---      */}
+          {/* ============================================================== */}
+          <div className="cockpit-main-grid">
+            {/* ------------------------------------------------------------ */}
+            {/* COLUMN 1: LEFT DATA COLUMN (ATE Sanity + Module A Matrix)     */}
+            {/* ------------------------------------------------------------ */}
+            <div className="cockpit-col-left">
+              {/* Pre-Screening & ATE Sanity Checker Card */}
+              <div
+                className="panel ate-sanity-card scroll-reveal-card"
+                onMouseMove={handleCardTilt}
+                onMouseLeave={resetCardTilt}
+              >
+                <div className="sanity-card-header">
+                  <div className="sanity-badge">
+                    <span className="live-indicator-beacon" />
+                    <Cpu size={12} className="text-cyan" />
+                    <span>PRE-SCREENING ATE SANITY CHECKER</span>
+                  </div>
+                  <button
+                    className="view-chamber-btn"
+                    onClick={(e) => openModalWithOrigin(setIsChamberOpen, e)}
+                    title="Open Chamber Monitor Modal"
                   >
-                    <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" vertical={false} />
-                    <XAxis dataKey="name" stroke="#64748b" fontSize={9} tickLine={false} />
-                    <YAxis stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={[0, 8]} />
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="minimalist-tooltip">
-                              <div className="tooltip-id">{data.id}</div>
-                              <div className="tooltip-row">
-                                <span>MODIFIED Z-SCORE:</span>
-                                <b>+{data.score} σ</b>
-                              </div>
-                              <div className="tooltip-row">
-                                <span>VERDICT:</span>
-                                <b style={{ color: verdictColor[data.verdict] }}>{data.verdict}</b>
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <ReferenceLine y={3.5} stroke="#ef4444" strokeDasharray="3 3" label={{ value: 'REJECT (3.5σ)', fill: '#ef4444', fontSize: 9, position: 'insideTopRight' }} />
-                    <ReferenceLine y={2.0} stroke="#f59e0b" strokeDasharray="2 2" label={{ value: 'REVIEW (2.0σ)', fill: '#f59e0b', fontSize: 9, position: 'insideTopRight' }} />
-                    <Bar dataKey="score" radius={[4, 4, 0, 0]}>
-                      {evaluatedComponents.slice(0, 24).map((c) => (
-                        <Cell
-                          key={c.id}
-                          fill={verdictColor[c.verdict]}
-                          cursor="pointer"
-                          onClick={() => setSelectedId(c.id)}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* Sub-Tab 2: Robust Mahalanobis 2D Covariance Plot (Leakage vs Propagation Delay) */}
-            {tab === 'maha' && (
-              <div className="chart-wrap">
-                <div className="maha-header-legend">
-                  <span>
-                    <i className="dot green" /> CORRELATED CLUSTER (TYPE 1 NOMINAL)
-                  </span>
-                  <span>
-                    <i className="dot red" /> TYPE 4 ANOMALY (BREAKS LEAKAGE-DELAY CORRELATION)
-                  </span>
+                    <span>125°C SOAK</span>
+                    <Maximize2 size={11} />
+                  </button>
                 </div>
-                <ResponsiveContainer width="100%" height={230}>
-                  <ScatterChart margin={{ top: 12, right: 18, left: -10, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" />
-                    <XAxis
-                      type="number"
-                      dataKey="delay"
-                      name="Propagation Delay"
-                      unit=" ns"
-                      stroke="#64748b"
-                      fontSize={9}
-                      domain={[1.4, 3.8]}
-                    />
-                    <YAxis
-                      type="number"
-                      dataKey="leakage"
-                      name="Iddq Leakage"
-                      unit=" µA"
-                      stroke="#64748b"
-                      fontSize={9}
-                      domain={[6, 50]}
-                    />
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const pt = payload[0].payload;
-                          return (
-                            <div className="minimalist-tooltip">
-                              <div className="tooltip-id">{pt.id}</div>
-                              <div className="tooltip-row">
-                                <span>PROPAGATION DELAY:</span> <b>{pt.delay} ns</b>
-                              </div>
-                              <div className="tooltip-row">
-                                <span>24H LEAKAGE:</span> <b>{pt.leakage} µA</b>
-                              </div>
-                              <div className="tooltip-row">
-                                <span>MAHALANOBIS DISTANCE:</span> <b className="text-orange">{pt.md} MAD</b>
-                              </div>
-                              <div className="tooltip-row">
-                                <span>ANOMALY CLASS:</span> <b>{pt.type}</b>
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Scatter
-                      data={mahalanobisData}
-                      onClick={(pt) => setSelectedId(pt.id)}
-                      cursor="pointer"
-                    >
-                      {mahalanobisData.map((entry) => (
-                        <Cell
-                          key={entry.id}
-                          fill={entry.isAnomaly ? '#ef4444' : '#10b981'}
-                          stroke={selectedId === entry.id ? '#ffffff' : 'none'}
-                          strokeWidth={selectedId === entry.id ? 2 : 0}
-                          r={selectedId === entry.id ? 7 : entry.isAnomaly ? 6 : 4}
-                        />
-                      ))}
-                    </Scatter>
-                  </ScatterChart>
-                </ResponsiveContainer>
-              </div>
-            )}
 
-            {/* Sub-Tab 3: Wafer Spatial Map */}
-            {tab === 'wafer' && (
-              <WaferSpatialMap
-                components={evaluatedComponents}
-                selectedId={selectedId}
-                onSelectComponent={(id) => setSelectedId(id)}
-              />
-            )}
-
-            {/* Sub-Tab 4: Isolation Forest Heatmap */}
-            {tab === 'forest' && (
-              <div className="chart-wrap">
-                <div className="isolation-forest-view">
-                  <div className="forest-grid">
-                    {evaluatedComponents.map((c) => (
-                      <div
-                        key={c.id}
-                        className={`forest-cell ${c.verdict.toLowerCase()} ${
-                          selectedId === c.id ? 'selected' : ''
-                        }`}
-                        onClick={() => setSelectedId(c.id)}
-                        title={`${c.id}: ${c.mad.toFixed(1)} MAD • ${c.verdict}`}
-                      >
-                        <span className="cell-id-sub">{c.id.slice(-4)}</span>
-                      </div>
-                    ))}
+                <div className="sanity-status-row">
+                  <div className="sanity-kpi">
+                    <span className="kpi-tag">CHAMBER TEMP</span>
+                    <b className="kpi-reading text-orange">125.0°C</b>
                   </div>
+                  <div className="sanity-kpi">
+                    <span className="kpi-tag">CORE BIAS</span>
+                    <b className="kpi-reading text-cyan">3.30 V</b>
+                  </div>
+                  <div className="sanity-kpi">
+                    <span className="kpi-tag">TOTAL HTOL</span>
+                    <b className="kpi-reading text-green">168.0 h</b>
+                  </div>
+                </div>
 
-                  <div className="forest-legend">
+                {/* 6 ATE Sanity Verification Channels */}
+                <div className="sanity-channels-table">
+                  <div className="channel-row pass">
+                    <span className="ch-pin">CH-01: VDD_CORE</span>
+                    <span className="ch-test">Contact R: 0.42 Ω (&lt;1.5Ω)</span>
+                    <span className="ch-verdict text-green">PASS</span>
+                  </div>
+                  <div className="channel-row pass">
+                    <span className="ch-pin">CH-02: GND_SUB</span>
+                    <span className="ch-test">Return R: 0.18 Ω (&lt;1.0Ω)</span>
+                    <span className="ch-verdict text-green">PASS</span>
+                  </div>
+                  <div className="channel-row pass">
+                    <span className="ch-pin">CH-03: CLK_DIFF+</span>
+                    <span className="ch-test">Clock Jitter: 1.24 ps</span>
+                    <span className="ch-verdict text-green">PASS</span>
+                  </div>
+                  <div className="channel-row pass">
+                    <span className="ch-pin">CH-04: I/O_LEAK</span>
+                    <span className="ch-test">Delay: +4.82 ns (&gt;0.0ns)</span>
+                    <span className="ch-verdict text-green">PASS</span>
+                  </div>
+                  <div className="channel-row pass">
+                    <span className="ch-pin">CH-05: SENSE_RAD</span>
+                    <span className="ch-test">Thermal Cal: 125.1°C (±1°C)</span>
+                    <span className="ch-verdict text-green">PASS</span>
+                  </div>
+                  <div className="channel-row pass">
+                    <span className="ch-pin">CH-06: PROBE_BUS</span>
+                    <span className="ch-test">Short Leakage: &lt;10 nA</span>
+                    <span className="ch-verdict text-green">PASS</span>
+                  </div>
+                </div>
+
+                <div className="sanity-card-footer">
+                  <CheckCircle2 size={12} className="text-green" />
+                  <span>Automated Sanity: Zero contact faults, open pins, or negative delays detected.</span>
+                </div>
+              </div>
+
+              {/* Module A: Population Anomaly Matrix */}
+              <div id="module-a" className="scroll-anchor" />
+              <div
+                className="panel chart-panel scroll-reveal-card"
+                onMouseMove={handleCardTilt}
+                onMouseLeave={resetCardTilt}
+              >
+                <div className="panel-head">
+                  <div>
+                    <div className="section-tag">
+                      <span className="num">A</span> POPULATION & SPATIAL ENGINE
+                    </div>
+                    <h2>Hierarchical Dynamic Population Matrix</h2>
+                  </div>
+                  <div className="profile-stats">
                     <span>
-                      <i className="dot green" /> ACCEPT (NOMINAL)
+                      MEDIAN <b>{useHistoricalBaseline ? '11.4 µA' : '11.8 µA'}</b>
                     </span>
                     <span>
-                      <i className="dot amber" /> REVIEW (ANOMALOUS COVARIANCE)
-                    </span>
-                    <span>
-                      <i className="dot red" /> REJECT (ELEVATED RISK)
+                      MAD <b>{useHistoricalBaseline ? '1.15' : '1.43'}</b>
                     </span>
                   </div>
                 </div>
-              </div>
-            )}
 
-            <div className="legend">
-              <span>
-                <i className="dot cyan" /> NOMINAL POPULATION
-              </span>
-              <span>
-                <i className="dot amber" /> REVIEW BAND
-              </span>
-              <span>
-                <i className="dot red" /> ELEVATED RISK
-              </span>
-              <span className="method">
-                {useHistoricalBaseline
-                  ? 'ROBUST FALLBACK: CURRENT LOT BLENDED WITH 500-UNIT ARCHIVE'
-                  : `ROBUST BASELINE: ${lot.split('/')[0].trim()} / 168H ARCHIVE`}
-              </span>
-            </div>
-          </div>
-
-          {/* Panel B: Trajectory & Drift Predictor */}
-          <div id="module-b" className="scroll-anchor" />
-          <div
-            className="panel chart-panel scroll-reveal-card"
-            onMouseMove={handleCardTilt}
-            onMouseLeave={resetCardTilt}
-          >
-            <div className="panel-head">
-              <div>
-                <div className="section-tag">
-                  <span className="num">B</span> DRIFT FORENSICS & RECALIBRATION
-                </div>
-                <h2>Trajectory Prognostics & 96h Inject</h2>
-              </div>
-              <div className="trajectory-header-actions">
-                {/* Scrubbable Time Stepper */}
-                <div className="time-stepper-group" title="Scrub inspection milestone">
-                  {['0h', '24h', '96h', '168h'].map((hr) => (
+                {/* Sub-Tabs: Z-Score, Mahalanobis Scatter, Wafer Spatial Map, Isolation Forest */}
+                <div className="tabs">
+                  {[
+                    ['zscore', 'MODIFIED Z-SCORE'],
+                    ['maha', 'MAHALANOBIS (TYPE 4)'],
+                    ['wafer', 'WAFER SPATIAL MAP'],
+                    ['forest', 'ISOLATION FOREST']
+                  ].map(([k, t]) => (
                     <button
-                      key={hr}
-                      className={`time-step-btn ${activeHour === hr ? 'active' : ''}`}
-                      onClick={() => setActiveHour(hr)}
+                      key={k}
+                      className={`tab-btn ${tab === k ? 'active' : ''}`}
+                      onClick={() => setTab(k)}
                     >
-                      {hr}
+                      {t}
                     </button>
                   ))}
                 </div>
 
-                {/* 96h Data Arrival Injection Toggle */}
-                <label
-                  className="toggle-control"
-                  title="Dynamic 96h injection: Narrows uncertainty corridor P10-P90 or triggers early abort"
-                >
-                  <input
-                    type="checkbox"
-                    checked={has96}
-                    onChange={(e) => setHas96(e.target.checked)}
-                  />
-                  <span className="toggle-track" />
-                  <span className="toggle-text">96H INJECT</span>
-                </label>
-
-                {/* Monte Carlo Toggle & Simulation Launcher with Rocket Animation */}
-                <div className="mc-btn-group">
-                  <button
-                    className={`subtle-btn mc-toggle-btn ${showMonteCarlo ? 'active' : ''}`}
-                    onClick={() => {
-                      if (!showMonteCarlo) {
-                        setShowMonteCarlo(true);
-                        setMcRunId(1);
-                      } else {
-                        setMcRunId((prev) => prev + 1);
-                      }
-                    }}
-                    title="Launch Monte Carlo trajectory simulation with rocket flight drawing animation"
-                  >
-                    <Orbit size={13} className={showMonteCarlo ? 'spin-slow' : ''} />
-                    <span>MONTE CARLO</span>
-                    {showMonteCarlo && <span className="mc-run-chip">RUN #{mcRunId}</span>}
-                  </button>
-                  {showMonteCarlo && (
-                    <button
-                      className="subtle-btn mc-reset-btn"
-                      onClick={() => setShowMonteCarlo(false)}
-                      title="Clear Monte Carlo simulation"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Selected Component Badge & Early Abort Banner */}
-            <div className="selected-chip-row">
-              <div className="selected-chip">
-                <CircleDot size={14} className="chip-icon" />
-                <b className="chip-id">{comp.id}</b>
-                <span className="chip-type">{comp.type}</span>
-                <span className="chip-lot">{lot.split('/')[1]?.trim() || 'LOGIC'}</span>
-                <i style={{ color: verdictColor[comp.verdict] }} className="chip-verdict">
-                  {comp.verdict}
-                </i>
-              </div>
-
-              {/* Dynamic Early-Abort Alert for Accelerating Drift */}
-              {comp.type === 'ACCELERATING DRIFT' && (
-                <div className="early-abort-badge">
-                  <AlertTriangle size={12} className="text-red" />
-                  <span>EARLY ABORT CRITERION MET: TYPE 2 LATENT DEFECT</span>
-                </div>
-              )}
-            </div>
-
-            {/* Trajectory Composed Chart with Rocket Drawer Overlay */}
-            <div className="chart-wrap trajectory" ref={trajectoryChartRef}>
-              {/* Rocket Trajectory Drawer Animation */}
-              <MonteCarloRocketDrawer
-                containerRef={trajectoryChartRef}
-                isActive={showMonteCarlo}
-                runId={mcRunId}
-                data={trajectory}
-              />
-
-              <ResponsiveContainer width="100%" height={220}>
-                <ComposedChart data={trajectory} margin={{ top: 15, right: 25, left: 10, bottom: 20 }}>
-                  <defs>
-                    <linearGradient id="healthyBandGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#29B6D1" stopOpacity={0.22} />
-                      <stop offset="100%" stopColor="#29B6D1" stopOpacity={0.02} />
-                    </linearGradient>
-                    <linearGradient id="confidenceCorridorGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#f58220" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#f58220" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" vertical={false} />
-                  <XAxis dataKey="h" stroke="#64748b" fontSize={10} tickLine={false} />
-                  <YAxis domain={[0, 60]} stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    content={({ active, payload, label }) => {
-                      if (active && payload && payload.length) {
-                        return (
-                          <div className="minimalist-tooltip">
-                            <div className="tooltip-id">
-                              {comp.id} • INSPECTION: {label}
-                            </div>
-                            {payload.map((p) => {
-                              if (!p.value || p.name === 'low' || p.name === 'p10') return null;
+                {/* Sub-Tab 1: Modified Z-Score Bar Chart */}
+                {tab === 'zscore' && (
+                  <div className="chart-wrap">
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart
+                        data={evaluatedComponents.slice(0, 20).map((c) => ({
+                          id: c.id,
+                          name: c.id.slice(-4),
+                          score: Number(c.mad.toFixed(2)),
+                          verdict: c.verdict
+                        }))}
+                        margin={{ top: 12, right: 12, left: -15, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" vertical={false} />
+                        <XAxis dataKey="name" stroke="#64748b" fontSize={9} tickLine={false} />
+                        <YAxis stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={[0, 8]} />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload;
                               return (
-                                <div className="tooltip-row" key={p.name}>
-                                  <span>{p.name.toUpperCase()}:</span>
-                                  <b>{p.value} µA</b>
+                                <div className="minimalist-tooltip">
+                                  <div className="tooltip-id">{data.id}</div>
+                                  <div className="tooltip-row">
+                                    <span>MODIFIED Z-SCORE:</span>
+                                    <b>+{data.score} σ</b>
+                                  </div>
+                                  <div className="tooltip-row">
+                                    <span>VERDICT:</span>
+                                    <b style={{ color: verdictColor[data.verdict] }}>{data.verdict}</b>
+                                  </div>
                                 </div>
                               );
-                            })}
+                            }
+                            return null;
+                          }}
+                        />
+                        <ReferenceLine y={3.5} stroke="#ef4444" strokeDasharray="3 3" />
+                        <ReferenceLine y={2.0} stroke="#f59e0b" strokeDasharray="2 2" />
+                        <Bar dataKey="score" radius={[4, 4, 0, 0]}>
+                          {evaluatedComponents.slice(0, 20).map((c) => (
+                            <Cell
+                              key={c.id}
+                              fill={verdictColor[c.verdict]}
+                              cursor="pointer"
+                              onClick={() => setSelectedId(c.id)}
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Sub-Tab 2: Robust Mahalanobis 2D Covariance Plot */}
+                {tab === 'maha' && (
+                  <div className="chart-wrap">
+                    <div className="maha-header-legend">
+                      <span>
+                        <i className="dot green" /> NOMINAL CORRELATED
+                      </span>
+                      <span>
+                        <i className="dot red" /> TYPE 4 ANOMALY
+                      </span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <ScatterChart margin={{ top: 12, right: 18, left: -15, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" />
+                        <XAxis
+                          type="number"
+                          dataKey="delay"
+                          name="Propagation Delay"
+                          unit=" ns"
+                          stroke="#64748b"
+                          fontSize={9}
+                          domain={[1.4, 3.8]}
+                        />
+                        <YAxis
+                          type="number"
+                          dataKey="leakage"
+                          name="Iddq Leakage"
+                          unit=" µA"
+                          stroke="#64748b"
+                          fontSize={9}
+                          domain={[6, 50]}
+                        />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const pt = payload[0].payload;
+                              return (
+                                <div className="minimalist-tooltip">
+                                  <div className="tooltip-id">{pt.id}</div>
+                                  <div className="tooltip-row">
+                                    <span>DELAY:</span> <b>{pt.delay} ns</b>
+                                  </div>
+                                  <div className="tooltip-row">
+                                    <span>LEAKAGE:</span> <b>{pt.leakage} µA</b>
+                                  </div>
+                                  <div className="tooltip-row">
+                                    <span>MAHALANOBIS:</span> <b className="text-orange">{pt.md} MAD</b>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Scatter
+                          data={mahalanobisData}
+                          onClick={(pt) => setSelectedId(pt.id)}
+                          cursor="pointer"
+                        >
+                          {mahalanobisData.map((entry) => (
+                            <Cell
+                              key={entry.id}
+                              fill={entry.isAnomaly ? '#ef4444' : '#10b981'}
+                              stroke={selectedId === entry.id ? '#ffffff' : 'none'}
+                              strokeWidth={selectedId === entry.id ? 2 : 0}
+                              r={selectedId === entry.id ? 7 : entry.isAnomaly ? 6 : 4}
+                            />
+                          ))}
+                        </Scatter>
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Sub-Tab 3: Wafer Spatial Map */}
+                {tab === 'wafer' && (
+                  <WaferSpatialMap
+                    components={evaluatedComponents}
+                    selectedId={selectedId}
+                    onSelectComponent={(id) => setSelectedId(id)}
+                  />
+                )}
+
+                {/* Sub-Tab 4: Isolation Forest Heatmap */}
+                {tab === 'forest' && (
+                  <div className="chart-wrap">
+                    <div className="isolation-forest-view">
+                      <div className="forest-grid">
+                        {evaluatedComponents.map((c) => (
+                          <div
+                            key={c.id}
+                            className={`forest-cell ${c.verdict.toLowerCase()} ${
+                              selectedId === c.id ? 'selected' : ''
+                            }`}
+                            onClick={() => setSelectedId(c.id)}
+                            title={`${c.id}: ${c.mad.toFixed(1)} MAD • ${c.verdict}`}
+                          >
+                            <span className="cell-id-sub">{c.id.slice(-4)}</span>
                           </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  {/* Healthy Population Envelope */}
-                  <Area
-                    name="Healthy Baseline"
-                    dataKey="high"
-                    stroke="none"
-                    fill="url(#healthyBandGrad)"
-                  />
-                  <Area
-                    name="low"
-                    dataKey="low"
-                    stroke="none"
-                    fill="#05080e"
+                        ))}
+                      </div>
+
+                      <div className="forest-legend">
+                        <span>
+                          <i className="dot green" /> ACCEPT
+                        </span>
+                        <span>
+                          <i className="dot amber" /> REVIEW
+                        </span>
+                        <span>
+                          <i className="dot red" /> REJECT
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ------------------------------------------------------------ */}
+            {/* COLUMN 2: CENTER DIAGNOSTIC COLUMN (Module B + DPAT Curve)   */}
+            {/* ------------------------------------------------------------ */}
+            <div className="cockpit-col-center">
+              {/* Module B: Trajectory Prognostics */}
+              <div id="module-b" className="scroll-anchor" />
+              <div
+                className="panel chart-panel scroll-reveal-card"
+                onMouseMove={handleCardTilt}
+                onMouseLeave={resetCardTilt}
+              >
+                <div className="panel-head">
+                  <div>
+                    <div className="section-tag">
+                      <span className="num">B</span> DRIFT FORENSICS & RECALIBRATION
+                    </div>
+                    <h2>Trajectory Prognostics & 96h Inject</h2>
+                  </div>
+                  <div className="trajectory-header-actions">
+                    {/* Scrubbable Time Stepper */}
+                    <div className="time-stepper-group" title="Scrub inspection milestone">
+                      {['0h', '24h', '96h', '168h'].map((hr) => (
+                        <button
+                          key={hr}
+                          className={`time-step-btn ${activeHour === hr ? 'active' : ''}`}
+                          onClick={() => setActiveHour(hr)}
+                        >
+                          {hr}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* 96h Data Arrival Injection Toggle */}
+                    <label
+                      className="toggle-control"
+                      title="Dynamic 96h injection: Narrows uncertainty corridor P10-P90 or triggers early abort"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={has96}
+                        onChange={(e) => setHas96(e.target.checked)}
+                      />
+                      <span className="toggle-track" />
+                      <span className="toggle-text">96H INJECT</span>
+                    </label>
+
+                    {/* Monte Carlo Toggle & Simulation Launcher with Rocket Animation */}
+                    <div className="mc-btn-group">
+                      <button
+                        className={`subtle-btn mc-toggle-btn ${showMonteCarlo ? 'active' : ''}`}
+                        onClick={() => {
+                          if (!showMonteCarlo) {
+                            setShowMonteCarlo(true);
+                            setMcRunId(1);
+                          } else {
+                            setMcRunId((prev) => prev + 1);
+                          }
+                        }}
+                        title="Launch Monte Carlo trajectory simulation with rocket flight drawing animation"
+                      >
+                        <Orbit size={13} className={showMonteCarlo ? 'spin-slow' : ''} />
+                        <span>MONTE CARLO</span>
+                        {showMonteCarlo && <span className="mc-run-chip">#{mcRunId}</span>}
+                      </button>
+                      {showMonteCarlo && (
+                        <button
+                          className="subtle-btn mc-reset-btn"
+                          onClick={() => setShowMonteCarlo(false)}
+                          title="Clear Monte Carlo simulation"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Selected Component Badge & Early Abort Banner */}
+                <div className="selected-chip-row">
+                  <div className="selected-chip">
+                    <CircleDot size={14} className="chip-icon" />
+                    <b className="chip-id">{comp.id}</b>
+                    <span className="chip-type">{comp.type}</span>
+                    <i style={{ color: verdictColor[comp.verdict] }} className="chip-verdict">
+                      {comp.verdict}
+                    </i>
+                  </div>
+
+                  {comp.type === 'ACCELERATING DRIFT' && (
+                    <div className="early-abort-badge">
+                      <AlertTriangle size={12} className="text-red" />
+                      <span>EARLY ABORT: ACCELERATING DRIFT</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Trajectory Composed Chart with Rocket Drawer Overlay */}
+                <div className="chart-wrap trajectory" ref={trajectoryChartRef}>
+                  <MonteCarloRocketDrawer
+                    containerRef={trajectoryChartRef}
+                    isActive={showMonteCarlo}
+                    runId={mcRunId}
+                    data={trajectory}
                   />
 
-                  {/* 90% Confidence Prediction Corridor (P10 to P90) */}
-                  <Area
-                    name="P90 Upper Corridor"
-                    dataKey="p90"
-                    stroke="none"
-                    fill="url(#confidenceCorridorGrad)"
-                  />
-                  <Area
-                    name="p10"
-                    dataKey="p10"
-                    stroke="none"
-                    fill="#05080e"
-                  />
+                  <ResponsiveContainer width="100%" height={230}>
+                    <ComposedChart data={trajectory} margin={{ top: 15, right: 25, left: 5, bottom: 20 }}>
+                      <defs>
+                        <linearGradient id="healthyBandGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#29B6D1" stopOpacity={0.22} />
+                          <stop offset="100%" stopColor="#29B6D1" stopOpacity={0.02} />
+                        </linearGradient>
+                        <linearGradient id="confidenceCorridorGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#f58220" stopOpacity={0.25} />
+                          <stop offset="100%" stopColor="#f58220" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" vertical={false} />
+                      <XAxis dataKey="h" stroke="#64748b" fontSize={10} tickLine={false} />
+                      <YAxis domain={[0, 60]} stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (active && payload && payload.length) {
+                            return (
+                              <div className="minimalist-tooltip">
+                                <div className="tooltip-id">
+                                  {comp.id} • INSPECTION: {label}
+                                </div>
+                                {payload.map((p) => {
+                                  if (!p.value || p.name === 'low' || p.name === 'p10') return null;
+                                  return (
+                                    <div className="tooltip-row" key={p.name}>
+                                      <span>{p.name.toUpperCase()}:</span>
+                                      <b>{p.value} µA</b>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Area name="Healthy Baseline" dataKey="high" stroke="none" fill="url(#healthyBandGrad)" />
+                      <Area name="low" dataKey="low" stroke="none" fill="#05080e" />
+                      <Area name="P90 Corridor" dataKey="p90" stroke="none" fill="url(#confidenceCorridorGrad)" />
+                      <Area name="p10" dataKey="p10" stroke="none" fill="#05080e" />
 
-                  {/* Monte Carlo Simulated Lines */}
-                  {showMonteCarlo && (
-                    <>
+                      {showMonteCarlo && (
+                        <>
+                          <Line
+                            name="MC Sim"
+                            dataKey="mcSim"
+                            stroke="#29B6D1"
+                            strokeWidth={2.8}
+                            dot={false}
+                            className="mc-rocket-line"
+                            isAnimationActive={false}
+                          />
+                        </>
+                      )}
+
                       <Line
-                        name="MC 95% Lower"
-                        dataKey="mc1"
-                        stroke="#818cf8"
-                        strokeWidth={1}
-                        strokeDasharray="2 3"
+                        name="Safety Ceiling"
+                        dataKey="ceiling"
+                        stroke="#F59E0B"
+                        strokeWidth={1.5}
+                        strokeDasharray="4 4"
                         dot={false}
-                        opacity={0.45}
-                        isAnimationActive={false}
                       />
                       <Line
-                        name="MC 95% Upper"
-                        dataKey="mc2"
-                        stroke="#818cf8"
-                        strokeWidth={1}
-                        strokeDasharray="2 3"
-                        dot={false}
-                        opacity={0.45}
-                        isAnimationActive={false}
-                      />
-                      <Line
-                        name="MC Simulated Trajectory"
-                        dataKey="mcSim"
+                        name="Actual Telemetry"
+                        dataKey="actual"
                         stroke="#29B6D1"
                         strokeWidth={2.8}
-                        dot={false}
-                        className="mc-rocket-line"
-                        isAnimationActive={false}
+                        dot={{ r: 4, fill: '#29B6D1', stroke: '#05080e', strokeWidth: 2 }}
                       />
-                    </>
-                  )}
+                      <Line
+                        name="Predicted Forecast"
+                        dataKey="forecast"
+                        stroke="#F58220"
+                        strokeWidth={2.5}
+                        strokeDasharray="6 4"
+                        dot={{ r: 4, fill: '#F58220', stroke: '#05080e', strokeWidth: 2 }}
+                      />
+                      <ReferenceLine
+                        y={50}
+                        stroke="#EF4444"
+                        strokeDasharray="3 3"
+                        label={{ value: 'MAX 50 µA', fill: '#EF4444', fontSize: 9, position: 'insideTopRight' }}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
 
-                  {/* Safety Slope Ceiling Limit */}
-                  <Line
-                    name="Safety Slope Ceiling"
-                    dataKey="ceiling"
-                    stroke="#F59E0B"
-                    strokeWidth={1.5}
-                    strokeDasharray="4 4"
-                    dot={false}
-                  />
+              {/* Dynamic Part Average Testing (DPAT) Population Distribution Card */}
+              <div
+                className="panel chart-panel scroll-reveal-card"
+                onMouseMove={handleCardTilt}
+                onMouseLeave={resetCardTilt}
+              >
+                <div className="panel-head">
+                  <div>
+                    <div className="section-tag">
+                      <BarChart3 size={13} className="text-cyan" /> DPAT STATISTICAL METROLOGY
+                    </div>
+                    <h2>Gaussian Bell Curve & Outlier Demarcation</h2>
+                  </div>
+                  <div className="dpat-limits-pill">
+                    <span className="limit-tag">DPAT +3 MAD: <b>22.4 µA</b></span>
+                    <span className="limit-tag">DATASHEET: <b>40.0 µA</b></span>
+                  </div>
+                </div>
 
-                  {/* Actual Readings */}
-                  <Line
-                    name="Actual Telemetry"
-                    dataKey="actual"
-                    stroke="#29B6D1"
-                    strokeWidth={2.8}
-                    dot={{ r: 4, fill: '#29B6D1', stroke: '#05080e', strokeWidth: 2 }}
-                  />
-
-                  {/* Predicted Drift Forecast */}
-                  <Line
-                    name="Predicted Forecast"
-                    dataKey="forecast"
-                    stroke="#F58220"
-                    strokeWidth={2.5}
-                    strokeDasharray="6 4"
-                    dot={{ r: 4, fill: '#F58220', stroke: '#05080e', strokeWidth: 2 }}
-                  />
-
-                  {/* Absolute Datasheet Failure Ceiling */}
-                  <ReferenceLine
-                    y={50}
-                    stroke="#EF4444"
-                    strokeDasharray="3 3"
-                    label={{
-                      value: 'MAX DATASHEET LIMIT (50 µA)',
-                      fill: '#EF4444',
-                      fontSize: 9,
-                      position: 'insideTopRight'
-                    }}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
+                <div className="dpat-inline-summary">
+                  <div className="dpat-flag-box">
+                    <span className="flag-title">SELECTED PART: {comp.id}</span>
+                    <b className={comp.baseline[1] > 22.4 ? 'flag-status text-orange' : 'flag-status text-green'}>
+                      {comp.baseline[1]} µA {comp.baseline[1] > 22.4 ? '(STATISTICAL OUTLIER)' : '(NOMINAL IN-SPEC)'}
+                    </b>
+                  </div>
+                  <p className="dpat-narrative">
+                    MIL-STD-883G Dynamic Part Average Testing flags components that are legally inside datasheet limits (40 µA) but beyond the 3 MAD statistical lot distribution.
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="trajectory-foot">
-              <span>
-                <i className="line cyan" /> ACTUAL TELEMETRY
-              </span>
-              <span>
-                <i className="line orange" /> PREDICTED HORIZON
-              </span>
-              <span>
-                <i className="line amber dashed" /> SAFETY CEILING (dI/dt)
-              </span>
-              {showMonteCarlo && (
-                <span>
-                  <i className="line neon-cyan" /> MC SIMULATED TRAJECTORY (RUN #{mcRunId})
-                </span>
-              )}
-              <span className="limit">FLIGHT LIMIT: 50 µA</span>
+            {/* ------------------------------------------------------------ */}
+            {/* COLUMN 3: RIGHT ANALYSIS COLUMN (Radar/Scatter + Decision)   */}
+            {/* ------------------------------------------------------------ */}
+            <div className="cockpit-col-right">
+              {/* Multi-Parametric Radar Chart / Prognostic Scatter Toggle */}
+              <div
+                className="panel chart-panel scroll-reveal-card"
+                onMouseMove={handleCardTilt}
+                onMouseLeave={resetCardTilt}
+              >
+                <div className="panel-head">
+                  <div>
+                    <div className="section-tag">
+                      <RadarIcon size={13} className="text-orange" /> MULTIVARIATE ENVELOPE
+                    </div>
+                    <h2>6-Axis Latent Defect Radar</h2>
+                  </div>
+                  <div className="radar-head-tabs">
+                    <button
+                      className={`radar-head-tab-btn ${radarOrScatter === 'radar' ? 'active' : ''}`}
+                      onClick={() => setRadarOrScatter('radar')}
+                    >
+                      RADAR
+                    </button>
+                    <button
+                      className={`radar-head-tab-btn ${radarOrScatter === 'scatter' ? 'active' : ''}`}
+                      onClick={() => setRadarOrScatter('scatter')}
+                    >
+                      SCATTER
+                    </button>
+                  </div>
+                </div>
+
+                {radarOrScatter === 'radar' ? (
+                  <div className="radar-quick-view">
+                    <svg viewBox="0 0 280 220" className="radar-inline-svg">
+                      <polygon
+                        points={radarMetrics.basePts}
+                        fill="rgba(41, 182, 209, 0.22)"
+                        stroke="#29B6D1"
+                        strokeWidth="1.5"
+                        strokeDasharray="3 3"
+                      />
+                      <polygon
+                        points={radarMetrics.unitPts}
+                        fill={comp.verdict === 'REJECT' ? 'rgba(239, 68, 68, 0.28)' : 'rgba(245, 130, 32, 0.28)'}
+                        stroke={comp.verdict === 'REJECT' ? '#EF4444' : '#F58220'}
+                        strokeWidth="2.0"
+                      />
+                      {radarMetrics.values.map((v, i) => {
+                        const pt = radarMetrics.getPt(v, i);
+                        return (
+                          <circle
+                            key={i}
+                            cx={pt.x}
+                            cy={pt.y}
+                            r="3.5"
+                            fill={comp.verdict === 'REJECT' ? '#EF4444' : '#F58220'}
+                          />
+                        );
+                      })}
+                    </svg>
+                    <div className="radar-labels-legend">
+                      <span><i className="dot cyan" /> HEALTHY BASELINE</span>
+                      <span><i className="dot orange" /> {comp.id} PROFILE</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="chart-wrap">
+                    <ResponsiveContainer width="100%" height={200}>
+                      <ScatterChart margin={{ top: 10, right: 15, left: -15, bottom: 15 }}>
+                        <CartesianGrid strokeDasharray="2 4" stroke="#ffffff0d" />
+                        <XAxis type="number" dataKey="d24" name="Δ-24h" unit="µA" stroke="#64748b" fontSize={9} />
+                        <YAxis type="number" dataKey="d168" name="Δ-168h" unit="µA" stroke="#64748b" fontSize={9} />
+                        <Scatter
+                          data={evaluatedComponents.map((c) => ({
+                            id: c.id,
+                            d24: Number(((c.baseline[1] - c.baseline[0])).toFixed(2)),
+                            d168: Number(((c.baseline[3] - c.baseline[0])).toFixed(2)),
+                            verdict: c.verdict
+                          }))}
+                          onClick={(pt) => setSelectedId(pt.id)}
+                          cursor="pointer"
+                        >
+                          {evaluatedComponents.map((c) => (
+                            <Cell
+                              key={c.id}
+                              fill={verdictColor[c.verdict]}
+                              r={selectedId === c.id ? 7 : 4}
+                            />
+                          ))}
+                        </Scatter>
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+
+              {/* Explainability Engine & Action Dossier */}
+              <div id="decision-engine" className="scroll-anchor" />
+              <div
+                className="panel verdict-panel scroll-reveal-card"
+                onMouseMove={handleCardTilt}
+                onMouseLeave={resetCardTilt}
+              >
+                <div className="verdict-top">
+                  <div className="section-tag">
+                    <Target size={14} /> FLIGHT SCREENING DECISION
+                  </div>
+                  <div
+                    className="verdict-badge"
+                    style={{
+                      color: verdictColor[comp.verdict],
+                      borderColor: `${verdictColor[comp.verdict]}55`,
+                      background: `${verdictColor[comp.verdict]}14`
+                    }}
+                  >
+                    {comp.verdict === 'REJECT'
+                      ? 'ELEVATED LATENT RISK'
+                      : comp.verdict === 'REVIEW'
+                      ? 'ENGINEERING REVIEW'
+                      : 'FLIGHT COMPLIANT'}
+                  </div>
+                </div>
+
+                <div className="verdict-id-row">
+                  <div className="verdict-id-title">
+                    <b>{comp.id}</b>
+                    <span className="comp-subtag">{comp.type}</span>
+                    {dispositions[comp.id]?.status === 'APPROVE' && (
+                      <span className="approved-stamp">
+                        <ShieldCheck size={11} /> QA APPROVED
+                      </span>
+                    )}
+                    {dispositions[comp.id]?.status === 'REJECT' && (
+                      <span className="rejected-stamp">
+                        <ShieldAlert size={11} /> QUARANTINED
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="verdict-action-buttons">
+                    <button
+                      className="action-btn disposition-modal-trigger"
+                      onClick={(e) => openModalWithOrigin(setIsDispositionOpen, e)}
+                      title="Open Inspector Sign-Off Modal"
+                    >
+                      <UserCheck size={12} />
+                      <span>DISPOSITION</span>
+                    </button>
+                    <button
+                      className="action-btn ncr-modal-trigger"
+                      onClick={(e) => openModalWithOrigin(setIsNCROpen, e)}
+                      title="Generate Official ISRO Non-Conformance Report"
+                    >
+                      <FileText size={12} />
+                      <span>ISRO NCR</span>
+                    </button>
+                    <button
+                      className="action-btn export"
+                      onClick={handleExportCSV}
+                      title="Download full lot telemetry dossier in CSV"
+                    >
+                      <Download size={12} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Reason Codes */}
+                <div className="reasons">
+                  <div className="reason-item">
+                    <span className="reason-num">RC-01</span>
+                    <p>
+                      <b>Population MAD:</b> 24h leakage ={' '}
+                      <span className="val-hi">+{comp.mad.toFixed(1)} MAD</span> above median.
+                    </p>
+                  </div>
+                  <div className="reason-item">
+                    <span className="reason-num">RC-02</span>
+                    <p>
+                      <b>Drift Ratio:</b> Slope ({comp.slope.toFixed(3)} µA/h){' '}
+                      {comp.slope > slope ? (
+                        <span className="text-red">exceeds threshold ({slope.toFixed(2)})</span>
+                      ) : (
+                        <span className="text-green">within margin ({slope.toFixed(2)})</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {/* SHAP Attribution Waterfall */}
+                <div className="attribution">
+                  <div className="field-label">EXPLAINABLE SHAP ATTRIBUTION</div>
+                  <div className="attrib-bars">
+                    <div className="attrib-col">
+                      <span>0H BASE</span>
+                      <div className="bar-track"><i style={{ width: '28%', background: '#29B6D1' }} /></div>
+                      <small>+28%</small>
+                    </div>
+                    <div className="attrib-col">
+                      <span>24H DELTA</span>
+                      <div className="bar-track">
+                        <i
+                          style={{
+                            width: `${Math.min(100, comp.slope * 380)}%`,
+                            background: comp.slope > slope ? '#ef4444' : '#29B6D1'
+                          }}
+                        />
+                      </div>
+                      <small>{comp.slope > slope ? '+42%' : '+18%'}</small>
+                    </div>
+                    <div className="attrib-col">
+                      <span>COVARIANCE</span>
+                      <div className="bar-track">
+                        <i
+                          style={{
+                            width: comp.type.includes('MULTIVARIATE') ? '85%' : '35%',
+                            background: comp.type.includes('MULTIVARIATE') ? '#ef4444' : '#F59E0B'
+                          }}
+                        />
+                      </div>
+                      <small>{comp.type.includes('MULTIVARIATE') ? '+85%' : '+15%'}</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </section>
 
-        {/* Section 3: Decision & Explainability Engine */}
-        <div id="decision-engine" className="scroll-anchor" />
-
-        <section className="bottom-grid">
-          {/* Component Inventory & Search Matrix */}
-          <div
-            className="panel decision-panel scroll-reveal-card"
-            onMouseMove={handleCardTilt}
-            onMouseLeave={resetCardTilt}
-          >
+          {/* Autonomous Component Screening Inventory & Search Strip */}
+          <section className="panel decision-panel scroll-reveal-card">
             <div className="panel-head">
               <div>
                 <div className="section-tag">
-                  <span className="num">C</span> RISK FUSION & PART INVENTORY
+                  <span className="num">C</span> COMPONENT INVENTORY & SEARCH
                 </div>
-                <h2>Autonomous Component Screening Matrix</h2>
+                <h2>Flight Hardware Unit Telemetry Ledger</h2>
               </div>
               <div className="search-wrap">
                 <Search size={14} className="search-icon" />
@@ -1297,172 +1559,20 @@ export default function App() {
                 ))
               )}
             </div>
-          </div>
+          </section>
 
-          {/* Explainability Engine & Engineering Action Dossier */}
-          <div
-            className="panel verdict-panel scroll-reveal-card"
-            onMouseMove={handleCardTilt}
-            onMouseLeave={resetCardTilt}
-          >
-            <div className="verdict-top">
-              <div className="section-tag">
-                <Target size={14} /> FLIGHT SCREENING DECISION & EXPLAINABILITY
-              </div>
-              <div
-                className="verdict-badge"
-                style={{
-                  color: verdictColor[comp.verdict],
-                  borderColor: `${verdictColor[comp.verdict]}55`,
-                  background: `${verdictColor[comp.verdict]}14`
-                }}
-              >
-                {comp.verdict === 'REJECT'
-                  ? 'ELEVATED LATENT-DEFECT RISK'
-                  : comp.verdict === 'REVIEW'
-                  ? 'GATED ENGINEERING REVIEW'
-                  : 'FLIGHT HARDWARE COMPLIANT'}
-              </div>
-            </div>
-
-            <div className="verdict-id-row">
-              <div className="verdict-id-title">
-                <b>{comp.id}</b>
-                <span className="comp-subtag">{comp.type}</span>
-                {dispositions[comp.id]?.status === 'APPROVE' && (
-                  <span className="approved-stamp">
-                    <ShieldCheck size={12} /> QA FLIGHT APPROVED
-                  </span>
-                )}
-                {dispositions[comp.id]?.status === 'EXTENDED_240H' && (
-                  <span className="flagged-stamp">
-                    <Clock size={12} /> 240H EXTENDED SOAK
-                  </span>
-                )}
-                {dispositions[comp.id]?.status === 'REJECT' && (
-                  <span className="rejected-stamp">
-                    <ShieldAlert size={12} /> QUARANTINED
-                  </span>
-                )}
-              </div>
-
-              {/* Action Buttons for selected component */}
-              <div className="verdict-action-buttons">
-                <button
-                  className="action-btn disposition-modal-trigger"
-                  onClick={() => setIsDispositionOpen(true)}
-                  title="Open Inspector Sign-Off Modal"
-                >
-                  <UserCheck size={13} />
-                  <span>DISPOSITION</span>
-                </button>
-                <button
-                  className="action-btn ncr-modal-trigger"
-                  onClick={() => setIsNCROpen(true)}
-                  title="Generate Official ISRO Non-Conformance Report"
-                >
-                  <FileText size={13} />
-                  <span>ISRO NCR</span>
-                </button>
-                <button
-                  className="action-btn export"
-                  onClick={handleExportCSV}
-                  title="Download full lot telemetry dossier in CSV"
-                >
-                  <Download size={13} />
-                  <span>CSV</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Diagnostic Rationales & Reason Codes */}
-            <div className="reasons">
-              <div className="reason-item">
-                <span className="reason-num">RC-01</span>
-                <p>
-                  <b>Dynamic Population Deviation:</b> Leakage at 24h is{' '}
-                  <span className="val-hi">+{comp.mad.toFixed(1)} MAD</span> above lot median (Robust Modified Z-score).
-                </p>
-              </div>
-              <div className="reason-item">
-                <span className="reason-num">RC-02</span>
-                <p>
-                  <b>Prognostic Horizon:</b> Predicted 168h leakage ={' '}
-                  <span className="val-hi">{comp.forecast.toFixed(1)} µA</span>{' '}
-                  <small>[90% Prediction Interval: {comp.ci[0]} – {comp.ci[1]} µA]</small>
-                </p>
-              </div>
-              <div className="reason-item">
-                <span className="reason-num">RC-03</span>
-                <p>
-                  <b>Drift Rate Ratio:</b> Slope ({comp.slope.toFixed(3)} µA/h){' '}
-                  {comp.slope > slope ? (
-                    <span style={{ color: '#ef4444' }}>exceeds safety threshold ({slope.toFixed(2)} µA/h) by {((comp.slope / slope) * 100).toFixed(0)}%</span>
-                  ) : (
-                    <span style={{ color: '#10b981' }}>conforms within safety margin ({slope.toFixed(2)} µA/h)</span>
-                  )}
-                  .
-                </p>
-              </div>
-            </div>
-
-            <div className="driver-row">
-              <span className="driver-label">PRIMARY LATENT RISK DRIVER</span>
-              <b className="driver-val">{comp.driver}</b>
-            </div>
-
-            {/* SHAP Feature-Importance Waterfall Breakdown */}
-            <div className="attribution">
-              <div className="field-label">EXPLAINABLE SHAP ATTRIBUTION (DEFECT CONTRIBUTION WEIGHT)</div>
-              <div className="attrib-bars">
-                <div className="attrib-col">
-                  <span>0H VALUE</span>
-                  <div className="bar-track">
-                    <i style={{ width: '28%', background: '#29B6D1' }} />
-                  </div>
-                  <small>+28%</small>
-                </div>
-                <div className="attrib-col">
-                  <span>24H DELTA</span>
-                  <div className="bar-track">
-                    <i
-                      style={{
-                        width: `${Math.min(100, comp.slope * 380)}%`,
-                        background: comp.slope > slope ? '#ef4444' : '#29B6D1'
-                      }}
-                    />
-                  </div>
-                  <small>{comp.slope > slope ? '+42%' : '+18%'}</small>
-                </div>
-                <div className="attrib-col">
-                  <span>COVARIANCE</span>
-                  <div className="bar-track">
-                    <i
-                      style={{
-                        width: comp.type.includes('MULTIVARIATE') ? '85%' : '35%',
-                        background: comp.type.includes('MULTIVARIATE') ? '#ef4444' : '#F59E0B'
-                      }}
-                    />
-                  </div>
-                  <small>{comp.type.includes('MULTIVARIATE') ? '+85%' : '+15%'}</small>
-                </div>
-                <div className="attrib-col">
-                  <span>MAD OUTLIER</span>
-                  <div className="bar-track">
-                    <i
-                      style={{
-                        width: `${Math.min(100, comp.mad * 14)}%`,
-                        background: comp.mad > 3 ? '#ef4444' : '#818cf8'
-                      }}
-                    />
-                  </div>
-                  <small>{comp.mad > 3 ? '+74%' : '+22%'}</small>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
+          {/* ============================================================== */}
+          {/* --- ADVANCED DATA & DPAT VISUALIZATION SUITE SECTION ---       */}
+          {/* ============================================================== */}
+          <AdvancedDataVisualizationSuite
+            components={evaluatedComponents}
+            selectedComponent={comp}
+            onSelectComponent={(id) => setSelectedId(id)}
+            scrubHour={activeHour === '168h' ? 168 : activeHour === '96h' ? 96 : activeHour === '24h' ? 24 : 0}
+            onScrubHour={(hr) => setActiveHour(`${hr}h`)}
+          />
+        </main>
+      </div>
 
       {/* --- Footer Status Strip --- */}
       <footer className="footer-strip">
