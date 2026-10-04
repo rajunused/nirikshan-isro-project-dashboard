@@ -1,17 +1,14 @@
 import React, { useState } from 'react';
 import {
   Activity,
+  Thermometer,
   Layers3,
   Orbit,
   BarChart3,
   Target,
-  Thermometer,
-  Radio,
-  FileText,
-  Rocket,
-  ShieldCheck,
-  Zap,
-  Globe
+  FileSpreadsheet,
+  Globe,
+  FileText
 } from 'lucide-react';
 
 export default function CommandSidebar({
@@ -23,62 +20,69 @@ export default function CommandSidebar({
 }) {
   const [hoveredItem, setHoveredItem] = useState(null);
 
+  // Strictly ordered sequential mission navigation (Top to Bottom order matching page layout)
   const navItems = [
     {
       id: 'overview',
-      label: 'FLIGHT TELEMETRY OVERVIEW',
-      desc: 'Top KPIs & Screening Status',
+      label: '1. FLIGHT TELEMETRY OVERVIEW',
+      desc: 'Top KPIs & Lot Screening Controls',
       Icon: Activity,
       type: 'scroll'
     },
     {
+      id: 'chamber-monitor',
+      label: '2. 125°C IN-CHAMBER & ATE SANITY',
+      desc: 'HTOL Soak Profile & Contact Verification',
+      Icon: Thermometer,
+      type: 'scroll'
+    },
+    {
       id: 'module-a',
-      label: 'MODULE A: POPULATION MATRIX',
-      desc: 'Robust MAD & Wafer Spatial Map',
+      label: '3. MODULE A: POPULATION MATRIX',
+      desc: 'Robust MAD, Mahalanobis & Wafer Map',
       Icon: Layers3,
       type: 'scroll'
     },
     {
       id: 'module-b',
-      label: 'MODULE B: DRIFT FORENSICS',
-      desc: '0h-168h Trajectory & 96h Inject',
+      label: '4. MODULE B: DRIFT FORENSICS',
+      desc: '0h-168h Trajectory & 96h Dynamic Inject',
       Icon: Orbit,
       type: 'scroll'
     },
     {
-      id: 'adv-viz-suite',
-      label: 'ADVANCED DATA & DPAT SUITE',
-      desc: 'Outlier Bell Curve, Radar & Scatter',
+      id: 'dpat-suite',
+      label: '5. DPAT & 6-AXIS RADAR METROLOGY',
+      desc: 'Gaussian Bell Curve & Multivariate Spider',
       Icon: BarChart3,
       type: 'scroll'
     },
     {
       id: 'decision-engine',
-      label: 'DECISION & EXPLAINABILITY',
-      desc: 'Risk Fusion, SHAP & Gated Action',
+      label: '6. DECISION & EXPLAINABILITY',
+      desc: 'Risk Fusion, Reason Codes & Actions',
       Icon: Target,
       type: 'scroll'
     },
     {
-      id: 'chamber-monitor',
-      label: '125°C IN-CHAMBER MONITOR',
-      desc: 'HTOL Environment Telemetry',
-      Icon: Thermometer,
-      type: 'modal',
-      action: onOpenChamber
+      id: 'component-ledger',
+      label: '7. COMPONENT INVENTORY LEDGER',
+      desc: 'Flight Hardware Unit Audit Ledger',
+      Icon: FileSpreadsheet,
+      type: 'scroll'
     },
     {
       id: 'space-news',
-      label: 'ORBITAL INTELLIGENCE FEED',
-      desc: 'Live Mission News Drawer',
+      label: '8. ORBITAL INTELLIGENCE FEED',
+      desc: 'Live Space Missions Dispatch Drawer',
       Icon: Globe,
       type: 'modal',
       action: onOpenNews
     },
     {
       id: 'export-ncr',
-      label: 'ISRO NON-CONFORMANCE REPORT',
-      desc: 'Print/Export Level-1 NCR Sheet',
+      label: '9. ISRO NON-CONFORMANCE REPORT',
+      desc: 'Print/Export Level-1 QA NCR Sheet',
       Icon: FileText,
       type: 'modal',
       action: onOpenNCR
@@ -99,7 +103,14 @@ export default function CommandSidebar({
       if (onSelectSection) onSelectSection(item.id);
       const targetEl = document.getElementById(item.id);
       if (targetEl) {
-        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Smooth scroll with offset for topbar
+        const headerOffset = 80;
+        const elementPosition = targetEl.getBoundingClientRect().top;
+        const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+        window.scrollTo({
+          top: Math.max(0, offsetPosition),
+          behavior: 'smooth'
+        });
       }
     }
   };
@@ -111,9 +122,9 @@ export default function CommandSidebar({
         <span className="energy-pulse-beam" />
       </div>
 
-      {/* Dock Icon Buttons */}
+      {/* Dock Icon Buttons in strict sequential order */}
       <div className="dock-buttons-stack">
-        {navItems.map((item) => {
+        {navItems.map((item, idx) => {
           const isActive = activeSection === item.id;
           const isHovered = hoveredItem === item.id;
           const Icon = item.Icon;
@@ -125,7 +136,7 @@ export default function CommandSidebar({
               onMouseEnter={() => setHoveredItem(item.id)}
               onMouseLeave={() => setHoveredItem(null)}
             >
-              {/* Rotating Illuminated Orbital Ring with Ion Thruster Trail (Novel Space Effect) */}
+              {/* Rotating Illuminated Orbital Ring with Ion Thruster Trail */}
               {isActive && (
                 <div className="orbital-active-ring">
                   <svg className="orbital-svg-track" viewBox="0 0 54 54">
@@ -136,7 +147,6 @@ export default function CommandSidebar({
                         <stop offset="100%" stopColor="#29B6D1" stopOpacity="0" />
                       </linearGradient>
                     </defs>
-                    {/* Outer Rotating Plasma Ring */}
                     <circle
                       cx="27"
                       cy="27"
@@ -147,7 +157,6 @@ export default function CommandSidebar({
                       strokeDasharray="38 80"
                       className="orbit-spin-circle"
                     />
-                    {/* Inner Counter-Rotating Sub-Ring */}
                     <circle
                       cx="27"
                       cy="27"
