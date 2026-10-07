@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # PostgreSQL with TimescaleDB Extension for Time-Series HTOL Burn-in Telemetry
+  # =============================================================================
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: nirikshan_timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: isro_admin
+      POSTGRES_PASSWORD: isro_secure_ess_password
+      POSTGRES_DB: nirikshan_ess
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U isro_admin -d nirikshan_ess"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Redis Queue Broker & Result Cache
+  # =============================================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: nirikshan_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # =============================================================================
+  # Nirikshan FastAPI Backend Core
+  # =============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nirikshan_backend
+    restart: unless-stopped
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://isro_admin:isro_secure_ess_password@timescaledb:5432/nirikshan_ess
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - JWT_SECRET_KEY=isro_super_secret_aerospace_ground_station_jwt_key_2026
+    ports:
+      - "8000:8000"
+
+  # =============================================================================
+  # Celery Distributed Worker for High-Volume ATE STDF Ingestion & Simulations
+  # =============================================================================
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nirikshan_celery_worker
+    restart: unless-stopped
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+    depends_on:
+      - backend
+      - redis
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://isro_admin:isro_secure_ess_password@timescaledb:5432/nirikshan_ess
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+
+volumes:
+  timescale_data:
+  redis_data:
